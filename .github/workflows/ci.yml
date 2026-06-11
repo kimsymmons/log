@@ -2,10 +2,13 @@ name: CI
 
 on:
   push:
+    branches: ['**']
   pull_request:
+    branches: [main]
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +20,7 @@ jobs:
       - run: npm run build
 
   test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +32,7 @@ jobs:
       - run: npm test
 
   bench:
+    name: Bench (500-object fps gate)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,23 +41,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npx playwright install chromium --with-deps
-      - run: node scripts/bench.js
-      - name: Fail if benchmark gate missed
-        run: |
-          node -e "
-            const r = JSON.parse(require('fs').readFileSync('scripts/bench-results/latest.json', 'utf8'));
-            console.log('P90 fps:', r.p90fps, '| gate:', r.gate, '| passed:', r.passed);
-            if (!r.passed) process.exit(1);
-          "
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: bench-results
-          path: scripts/bench-results/latest.json
+      - run: npm run bench
 
-  eval-links:
+  deploy:
+    name: Deploy
+    needs: [build, test, bench]
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,5 +55,18 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: node scripts/eval-links.js
-        continue-on-error: true
+
+      # Backend: deploy to Fly.io
+      # To enable: add FLY_API_TOKEN as a GitHub Actions secret, then uncomment:
+      # - uses: superfly/flyctl-actions/setup-flyctl@master
+      # - run: flyctl deploy --remote-only
+      #   env:
+      #     FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Frontend: trigger Vercel production deploy
+      # To enable: add VERCEL_DEPLOY_HOOK_URL as a GitHub Actions secret, then uncomment:
+      # - run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+      #   env:
+      #     VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+
+      - run: echo "Deploy steps are commented out — add FLY_API_TOKEN and VERCEL_DEPLOY_HOOK_URL secrets to enable."
