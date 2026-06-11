@@ -4,8 +4,15 @@ import {
   HTMLContainer,
   T,
   type TLBaseShape,
+  type TLShapePartial,
   type Editor,
 } from 'tldraw'
+import type { ArtifactSsePayload } from '../types/artifact'
+import {
+  artifactTypeToShapeType,
+  ARTIFACT_COLLAPSED_SIZE,
+  type AnyArtifactShape,
+} from './ArtifactShapes'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +54,7 @@ export function chatCardTransition(state: ChatCardState, event: ChatCardEvent): 
 
 export type SseEvent =
   | { type: 'delta'; text: string }
-  | { type: 'summary'; title: string; body: string }
+  | { type: 'summary'; title: string; body: string; artifacts?: ArtifactSsePayload[] }
   | { type: 'error'; message: string }
   | { type: 'done' }
 
@@ -57,8 +64,12 @@ export function parseSseData(data: string): SseEvent | null {
     const obj = JSON.parse(data) as Record<string, unknown>
     if (typeof obj.delta === 'string') return { type: 'delta', text: obj.delta }
     if (obj.summary && typeof obj.summary === 'object') {
-      const s = obj.summary as { title?: string; body?: string }
-      return { type: 'summary', title: s.title ?? '', body: s.body ?? '' }
+      const s = obj.summary as { title?: string; body?: string; artifacts?: ArtifactSsePayload[] }
+      const result: SseEvent = { type: 'summary', title: s.title ?? '', body: s.body ?? '' }
+      if (s.artifacts && s.artifacts.length > 0) {
+        (result as { type: 'summary'; title: string; body: string; artifacts?: ArtifactSsePayload[] }).artifacts = s.artifacts
+      }
+      return result
     }
     if (typeof obj.error === 'string') return { type: 'error', message: obj.error }
   } catch {
@@ -175,6 +186,25 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
                 ],
               },
             })
+            if (event.artifacts && event.artifacts.length > 0) {
+              const currentShape = editor.getShape<ChatCardShape>(shape.id)
+              const baseX = (currentShape?.x ?? shape.x) + (currentShape?.props.w ?? shape.props.w) + 20
+              const baseY = currentShape?.y ?? shape.y
+              event.artifacts.forEach((artifact, i) => {
+                editor.createShape<AnyArtifactShape>({
+                  type: artifactTypeToShapeType(artifact.type),
+                  x: baseX,
+                  y: baseY + i * (ARTIFACT_COLLAPSED_SIZE.h + 10),
+                  props: {
+                    w: ARTIFACT_COLLAPSED_SIZE.w,
+                    h: ARTIFACT_COLLAPSED_SIZE.h,
+                    chatId: shape.id,
+                    content: artifact.content,
+                    title: artifact.title,
+                  },
+                })
+              })
+            }
           }
         } else if (event.type === 'error') {
           throw new Error(event.message)
@@ -346,6 +376,8 @@ function StreamingCursor() {
 
 // ── ShapeUtil ──────────────────────────────────────────────────────────────
 
+type DragArtifact = { id: string; type: string; dx: number; dy: number }
+
 export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
   static override type = 'chat-card' as const
 
@@ -358,6 +390,9 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     createdAt: T.number,
   }
 
+  // Tracks artifact offsets at drag start so they can follow the parent
+  private readonly _dragState = new Map<string, { artifacts: DragArtifact[] }>()
+
   getDefaultProps(): ChatCardShape['props'] {
     return {
       w: COLLAPSED_SIZE.w,
@@ -367,6 +402,34 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
       summary: '',
       createdAt: Date.now(),
     }
+  }
+
+  override onTranslateStart(shape: ChatCardShape): void {
+    const artifacts = this.editor.getCurrentPageShapes().filter(
+      s => ['markdown-artifact', 'code-artifact', 'image-artifact'].includes(s.type) &&
+           (s as AnyArtifactShape).props.chatId === shape.id
+    ) as AnyArtifactShape[]
+
+    this._dragState.set(shape.id, {
+      artifacts: artifacts.map(a => ({ id: a.id, type: a.type, dx: a.x - shape.x, dy: a.y - shape.y })),
+    })
+  }
+
+  override onTranslate(initial: ChatCardShape, current: ChatCardShape): void {
+    const state = this._dragState.get(initial.id)
+    if (!state || state.artifacts.length === 0) return
+    this.editor.updateShapes(
+      state.artifacts.map(({ id, type, dx, dy }) => ({
+        id,
+        type,
+        x: current.x + dx,
+        y: current.y + dy,
+      } as TLShapePartial))
+    )
+  }
+
+  override onTranslateEnd(initial: ChatCardShape): void {
+    this._dragState.delete(initial.id)
   }
 
   component(shape: ChatCardShape) {
