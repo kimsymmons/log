@@ -1,3 +1,5 @@
+// ── Domain model types (PEO-111 / PEO-115) ──────────────────────────────────
+
 export type ArtifactType = 'chat' | 'project' | 'note' | 'sketch'
 
 export type LinkProvenance = 'model-drawn' | 'user-pinned' | 'user-made' | 'dismissed'
@@ -45,3 +47,16 @@ export interface MemoryEntry {
 }
 
 export type NewMemoryEntry = Omit<MemoryEntry, 'id' | 'created_at'>
+
+// ── Canvas artifact shape types (PEO-119) ────────────────────────────────────
+
+/** Type discriminator for the three tldraw artifact shapes on the canvas. */
+export type ArtifactShapeType = 'markdown' | 'code' | 'image'
+
+/** Payload emitted in an SSE summary event when the model produces
+ *  a standalone artifact alongside the conversation summary. */
+export type ArtifactSsePayload = {
+  type: ArtifactShapeType
+  title: string
+  content: string
+}

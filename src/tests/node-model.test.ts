@@ -34,8 +34,9 @@ function makeChatShape(overrides: Partial<ChatCardShape> = {}): ChatCardShape {
       w: 240.5,
       h: 120.25,
       title: 'Chat title',
-      body: 'Chat body',
-      timestamp: '2026-06-11T12:00:00.000Z',
+      messages: [],
+      summary: 'Chat body',
+      createdAt: new Date('2026-06-11T12:00:00.000Z').getTime(),
     },
     ...overrides,
   }

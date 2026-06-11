@@ -51,8 +51,8 @@ export function shapeToNode(shape: TLShape): LogNode | null {
         w: s.props.w,
         h: s.props.h,
         title: s.props.title,
-        body: s.props.body,
-        timestamp: s.props.timestamp,
+        body: s.props.summary,
+        timestamp: new Date(s.props.createdAt).toISOString(),
       }
     }
     case 'draw': {
@@ -93,8 +93,9 @@ export function nodeToShape(node: LogNode, pageId: TLParentId): TLShapePartial |
           w: node.w,
           h: node.h,
           title: node.title,
-          body: node.body,
-          timestamp: node.timestamp,
+          messages: [],
+          summary: node.body,
+          createdAt: new Date(node.timestamp).getTime(),
         },
       }
     case 'ink-group': {

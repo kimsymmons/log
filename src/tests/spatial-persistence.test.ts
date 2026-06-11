@@ -42,7 +42,7 @@ function chatShapeRecord(id: string, x: number, y: number, index: string): ChatC
     opacity: 1,
     meta: {},
     typeName: 'shape',
-    props: { w: 240, h: 120, title: `Card ${id}`, body: 'body', timestamp: '2026-06-11T00:00:00.000Z' },
+    props: { w: 240, h: 120, title: `Card ${id}`, messages: [], summary: 'body', createdAt: new Date('2026-06-11T00:00:00.000Z').getTime() },
   }
 }
 

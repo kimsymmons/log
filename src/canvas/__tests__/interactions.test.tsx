@@ -62,8 +62,8 @@ describe('canvas interactions', () => {
   it('selectAll selects all shapes', () => {
     const { editor } = create()
     editor.createShapes([
-      { type: 'chat-card', x: 0, y: 0, props: { title: 'A', body: '', timestamp: '' } },
-      { type: 'chat-card', x: 200, y: 0, props: { title: 'B', body: '', timestamp: '' } },
+      { type: 'chat-card', x: 0, y: 0, props: { title: 'A', messages: [], summary: '', createdAt: 0 } },
+      { type: 'chat-card', x: 200, y: 0, props: { title: 'B', messages: [], summary: '', createdAt: 0 } },
     ])
     editor.selectAll()
     expect(editor.getSelectedShapes().length).toBe(2)
@@ -72,7 +72,7 @@ describe('canvas interactions', () => {
   it('zoomToFit moves camera so a shape is in view', () => {
     const { editor } = create()
     editor.createShapes([
-      { type: 'chat-card', x: 0, y: 0, props: { title: 'Test', body: '', timestamp: '' } },
+      { type: 'chat-card', x: 0, y: 0, props: { title: 'Test', messages: [], summary: '', createdAt: 0 } },
     ])
     editor.setCamera({ x: 9999, y: 9999, z: 1 })
     editor.zoomToFit()
@@ -83,7 +83,7 @@ describe('canvas interactions', () => {
   it('shape position updates via editor.updateShape', () => {
     const { editor } = create()
     editor.createShapes([
-      { type: 'chat-card', x: 10, y: 20, props: { title: 'Move me', body: '', timestamp: '' } },
+      { type: 'chat-card', x: 10, y: 20, props: { title: 'Move me', messages: [], summary: '', createdAt: 0 } },
     ])
     const [shape] = editor.getCurrentPageShapes()
     editor.updateShape({ ...shape, x: 300, y: 400 })

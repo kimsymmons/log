@@ -44,6 +44,10 @@ describe('chatCardTransition — state machine', () => {
   it('streaming + collapse → streaming (no-op while streaming)', () => {
     expect(chatCardTransition('streaming', 'collapse')).toBe('streaming')
   })
+
+  it('expanded + startStreaming → streaming (send from expanded)', () => {
+    expect(chatCardTransition('expanded', 'startStreaming')).toBe('streaming')
+  })
 })
 
 describe('ChatCard size constants', () => {
