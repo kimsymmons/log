@@ -93,8 +93,9 @@ async function run() {
           w: cardW,
           h: cardH,
           title: `Chat ${i + 1}`,
-          body: 'Benchmark body text.',
-          timestamp: new Date().toISOString(),
+          messages: [],
+          summary: 'Benchmark body text.',
+          createdAt: Date.now(),
         },
       }))
 

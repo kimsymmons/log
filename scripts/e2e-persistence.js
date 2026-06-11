@@ -43,7 +43,7 @@ async function run() {
           type: 'chat-card',
           x,
           y,
-          props: { w: 240, h: 120, title: 'Persisted card', body: 'survives reload', timestamp: '2026-06-11T00:00:00.000Z' },
+          props: { w: 240, h: 120, title: 'Persisted card', messages: [], summary: 'survives reload', createdAt: Date.parse('2026-06-11T00:00:00.000Z') },
         },
         {
           type: 'draw',
