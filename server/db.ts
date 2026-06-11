@@ -91,5 +91,15 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     `)
   }
 
+  // Additive migration: clusters table (PEO-124)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clusters (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      artifact_ids TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `)
+
   return db
 }

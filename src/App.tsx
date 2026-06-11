@@ -7,6 +7,7 @@ import {
   DefaultToolbarContent,
   type Editor,
   type TLShapePartial,
+  type TLFrameShape,
 } from 'tldraw'
 import { ChatCardShapeUtil, COLLAPSED_SIZE, type ChatCardShape } from './shapes/ChatCard'
 import {
@@ -312,6 +313,14 @@ const popoverBtnStyle: React.CSSProperties = {
 
 // ── MinimalToolbar (PEO-120) ─────────────────────────────────────────────────
 
+type ClusterSuggestion = {
+  id: string
+  label: string
+  artifactIds: string[]
+  projectType: string
+  confidence: number
+}
+
 function MinimalToolbar() {
   const editor = useEditor()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -382,6 +391,71 @@ function MinimalToolbar() {
     setTimeout(() => setToast(null), 3000)
   }, [editor])
 
+  const handleGroupClusters = useCallback(async () => {
+    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+    const authToken = localStorage.getItem('auth_token') ?? ''
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (authToken) headers.Authorization = `Bearer ${authToken}`
+
+    let clusters: ClusterSuggestion[]
+    try {
+      const res = await fetch(`${apiBase}/clusters/suggest`, { method: 'POST', headers })
+      if (!res.ok) {
+        setToast('Cluster suggestion failed')
+        setTimeout(() => setToast(null), 3000)
+        return
+      }
+      clusters = (await res.json()) as ClusterSuggestion[]
+    } catch {
+      setToast('Cluster suggestion failed')
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+
+    if (clusters.length === 0) {
+      setToast('No clusters found')
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+
+    const PAD = 40
+    editor.batch(() => {
+      for (const cluster of clusters) {
+        const shapes = cluster.artifactIds
+          .map(id => editor.getShape(id as TLFrameShape['id']))
+          .filter((s): s is NonNullable<typeof s> => s !== undefined)
+
+        if (shapes.length === 0) continue
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const shape of shapes) {
+          const bounds = editor.getShapePageBounds(shape)
+          if (!bounds) continue
+          if (bounds.minX < minX) minX = bounds.minX
+          if (bounds.minY < minY) minY = bounds.minY
+          if (bounds.maxX > maxX) maxX = bounds.maxX
+          if (bounds.maxY > maxY) maxY = bounds.maxY
+        }
+
+        if (!isFinite(minX)) continue
+
+        editor.createShape<TLFrameShape>({
+          type: 'frame',
+          x: minX - PAD,
+          y: minY - PAD,
+          props: {
+            w: maxX - minX + PAD * 2,
+            h: maxY - minY + PAD * 2,
+            name: cluster.label,
+          },
+        })
+      }
+    })
+
+    setToast(`${clusters.length} cluster${clusters.length === 1 ? '' : 's'} suggested`)
+    setTimeout(() => setToast(null), 3000)
+  }, [editor])
+
   return (
     <>
       <DefaultToolbar>
@@ -411,6 +485,25 @@ function MinimalToolbar() {
           }}
         >
           Import chats
+        </button>
+        <button
+          onClick={() => { void handleGroupClusters() }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            height: 32,
+            padding: '0 10px',
+            border: '1px solid #e0e0e0',
+            borderRadius: 6,
+            background: '#fff',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Group clusters
         </button>
       </DefaultToolbar>
       {toast && (

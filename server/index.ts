@@ -7,6 +7,7 @@ import { sendMagicLink } from './email'
 import { signToken, verifyToken } from './jwt'
 import { estimateCost } from './cost'
 import { findLinks, LINKING_MODEL } from './linking'
+import { suggestClusters } from './clustering'
 
 interface AuthToken {
   id: string
@@ -355,6 +356,45 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
     db.prepare('INSERT INTO link_feedback (id, link_id, action, created_at) VALUES (?, ?, ?, ?)').run(ulid(), id, 'remove', Date.now())
     db.prepare('DELETE FROM artifact_links WHERE id = ?').run(id)
+    res.json({ ok: true })
+  })
+
+  // POST /clusters/suggest — return AI-suggested clusters (PEO-124)
+  app.post('/clusters/suggest', requireAuth, async (req: Request, res: Response) => {
+    let anthropic: AnthropicLike
+    if (anthropicOverride) {
+      anthropic = anthropicOverride
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) {
+        res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
+        return
+      }
+      anthropic = new Anthropic({ apiKey })
+    }
+
+    try {
+      const clusters = await suggestClusters(db, anthropic)
+      res.json(clusters)
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message ?? 'Cluster suggestion failed' })
+    }
+  })
+
+  // POST /clusters/apply — persist a cluster (PEO-124)
+  app.post('/clusters/apply', requireAuth, (req: Request, res: Response) => {
+    const { clusterId, label, artifactIds } = req.body as {
+      clusterId?: string
+      label?: string
+      artifactIds?: string[]
+    }
+    if (!clusterId || typeof clusterId !== 'string' || !label || typeof label !== 'string' || !Array.isArray(artifactIds)) {
+      res.status(400).json({ error: 'clusterId, label, and artifactIds are required' })
+      return
+    }
+    db.prepare(
+      'INSERT OR REPLACE INTO clusters (id, label, artifact_ids, created_at) VALUES (?, ?, ?, ?)'
+    ).run(clusterId, label, JSON.stringify(artifactIds), Date.now())
     res.json({ ok: true })
   })
 
