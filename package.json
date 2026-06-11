@@ -11,7 +11,9 @@
     "build": "tsc && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "node scripts/bench-custom-shapes.js"
+    "bench": "node scripts/bench-custom-shapes.js",
+    "e2e:persistence": "node scripts/e2e-persistence.js",
+    "build:server": "tsc --project tsconfig.server.json"
   },
   "repository": {
     "type": "git",
@@ -27,20 +29,30 @@
   "homepage": "https://github.com/kimsymmons/log#readme",
   "dependencies": {
     "@vitejs/plugin-react": "^6.0.2",
+    "better-sqlite3": "^12.10.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "resend": "^6.12.4",
     "tldraw": "^3.15.6",
     "typescript": "^6.0.3",
+    "ulid": "^3.0.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^4.1.8",
     "jsdom": "^29.1.1",
-    "playwright": "^1.60.0"
+    "playwright": "^1.60.0",
+    "supertest": "^7.2.2"
   }
 }
