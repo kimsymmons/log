@@ -6,6 +6,7 @@ import {
   DefaultToolbar,
   DefaultToolbarContent,
   type Editor,
+  type TLShapePartial,
 } from 'tldraw'
 import { ChatCardShapeUtil, COLLAPSED_SIZE, type ChatCardShape } from './shapes/ChatCard'
 import {
@@ -16,6 +17,9 @@ import {
   type AnyArtifactShape,
 } from './shapes/ArtifactShapes'
 import { parseConversations, conversationToCardSeed } from './lib/importChats'
+import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
+import { createLocalNodeStore } from './persistence/local'
+import type { LogNode } from './model/nodes'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -24,13 +28,51 @@ const shapeUtils = [
   ImageArtifactShapeUtil,
 ]
 
+const SAVE_DEBOUNCE_MS = 500
+
 declare global {
   interface Window { __tldrawEditor?: Editor }
 }
 
 const ARTIFACT_TYPES = new Set(['markdown-artifact', 'code-artifact', 'image-artifact'])
 
-// ── TetherOverlay ────────────────────────────────────────────────────────────
+// ── Persistence (PEO-111) ────────────────────────────────────────────────────
+
+function setupPersistence(editor: Editor) {
+  const store = createLocalNodeStore()
+
+  const saved = store.load()
+  if (saved !== null && editor.getCurrentPageShapeIds().size === 0) {
+    const pageId = editor.getCurrentPageId()
+    const shapes = saved
+      .map((n) => nodeToShape(n, pageId))
+      .filter((s): s is TLShapePartial => s !== null)
+    if (shapes.length > 0) editor.createShapes(shapes)
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const unlisten = editor.store.listen(
+    () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        store.save(
+          editor
+            .getCurrentPageShapes()
+            .map(shapeToNode)
+            .filter((n): n is LogNode => n !== null)
+        )
+      }, SAVE_DEBOUNCE_MS)
+    },
+    { scope: 'document' }
+  )
+
+  return () => {
+    clearTimeout(timer)
+    unlisten()
+  }
+}
+
+// ── TetherOverlay (PEO-119) ──────────────────────────────────────────────────
 
 function TetherOverlay() {
   const editor = useEditor()
@@ -84,7 +126,7 @@ function TetherOverlay() {
   )
 }
 
-// ── MinimalToolbar ───────────────────────────────────────────────────────────
+// ── MinimalToolbar (PEO-120) ─────────────────────────────────────────────────
 
 function MinimalToolbar() {
   const editor = useEditor()
@@ -134,7 +176,6 @@ function MinimalToolbar() {
       })
     })
 
-    // Persist to backend — non-fatal if it fails
     const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
     const authToken = localStorage.getItem('auth_token') ?? ''
     fetch(`${apiBase}/import/chats`, {
@@ -224,7 +265,10 @@ export default function App() {
     <div style={{ position: 'fixed', inset: 0 }}>
       <Tldraw
         shapeUtils={shapeUtils}
-        onMount={(editor) => { window.__tldrawEditor = editor }}
+        onMount={(editor) => {
+          window.__tldrawEditor = editor
+          return setupPersistence(editor)
+        }}
         components={components}
       />
     </div>
