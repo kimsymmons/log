@@ -5,9 +5,20 @@ import {
   HTMLContainer,
   T,
   type TLBaseShape,
+  type Editor,
 } from 'tldraw'
 import { useContext } from 'react'
 import { getLOD } from '../canvas/perf'
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export type Message = { role: 'user' | 'assistant'; content: string }
+
+export type ChatCardState = 'collapsed' | 'expanded' | 'streaming'
+export type ChatCardEvent = 'expand' | 'collapse' | 'startStreaming' | 'streamingDone'
+
+export const COLLAPSED_SIZE = { w: 240, h: 120 }
+export const EXPANDED_SIZE = { w: 400, h: 500 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +88,12 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     summary: T.string,
     createdAt: T.number,
   }
+  if (state === 'expanded') {
+    if (event === 'collapse') return 'collapsed'
+    if (event === 'startStreaming') return 'streaming'
+  }
+  return state
+}
 
   getDefaultProps(): ChatCardShape['props'] {
     return {
@@ -87,7 +104,12 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
       summary: '',
       createdAt: Date.now(),
     }
+    if (typeof obj.error === 'string') return { type: 'error', message: obj.error }
+  } catch {
+    // malformed
   }
+  return null
+}
 
   component(shape: ChatCardShape) {
     return <ChatCardInner shape={shape} />
