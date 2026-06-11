@@ -7,5 +7,14 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/tests/setup.ts'],
+    environmentMatchGlobs: [
+      ['server/**', 'node'],
+    ],
+    server: {
+      deps: {
+        // Native modules and CJS-only packages must not be bundled by Vite
+        external: ['better-sqlite3', 'express', 'jsonwebtoken', 'resend', 'supertest'],
+      },
+    },
   },
 })
