@@ -20,6 +20,7 @@ import { parseConversations, conversationToCardSeed } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
 import type { LogNode } from './model/nodes'
+import { linkDisplayProps } from './canvas/linkDisplay'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -124,6 +125,189 @@ function TetherOverlay() {
       ))}
     </svg>
   )
+}
+
+// ── LinkOverlay (PEO-123) ────────────────────────────────────────────────────
+
+interface ArtifactLink {
+  id: string
+  source_id: string
+  target_id: string
+  strength: number
+  provenance: string
+  rationale: string | null
+}
+
+interface LinkPopover {
+  linkId: string
+  x: number
+  y: number
+}
+
+const API_BASE = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+const AUTH_TOKEN = () => localStorage.getItem('auth_token') ?? ''
+
+async function fetchLinksForShape(shapeId: string): Promise<ArtifactLink[]> {
+  try {
+    const res = await fetch(`${API_BASE}/links?artifactId=${encodeURIComponent(shapeId)}`, {
+      headers: AUTH_TOKEN() ? { Authorization: `Bearer ${AUTH_TOKEN()}` } : {},
+    })
+    if (!res.ok) return []
+    return (await res.json()) as ArtifactLink[]
+  } catch {
+    return []
+  }
+}
+
+function LinkOverlay() {
+  const editor = useEditor()
+  const [links, setLinks] = useState<ArtifactLink[]>([])
+  const [lines, setLines] = useState<Array<{
+    key: string
+    x1: number; y1: number; x2: number; y2: number
+    link: ArtifactLink
+  }>>([])
+  const [popover, setPopover] = useState<LinkPopover | null>(null)
+
+  const fetchAllLinks = useCallback(async () => {
+    const shapes = editor.getCurrentPageShapes()
+    const chatCards = shapes.filter(s => s.type === 'chat-card') as ChatCardShape[]
+    const ids = chatCards.map(c => c.id)
+
+    const batches = await Promise.all(ids.map(fetchLinksForShape))
+    const seen = new Set<string>()
+    const all: ArtifactLink[] = []
+    for (const batch of batches) {
+      for (const link of batch) {
+        if (!seen.has(link.id)) { seen.add(link.id); all.push(link) }
+      }
+    }
+    setLinks(all)
+  }, [editor])
+
+  useEffect(() => {
+    void fetchAllLinks()
+    const interval = setInterval(() => { void fetchAllLinks() }, 30_000)
+    return () => clearInterval(interval)
+  }, [fetchAllLinks])
+
+  useEffect(() => {
+    const compute = () => {
+      const shapes = editor.getCurrentPageShapes()
+      const shapeMap = new Map(shapes.map(s => [s.id, s]))
+
+      const newLines: typeof lines = []
+      for (const link of links) {
+        const src = shapeMap.get(link.source_id as ChatCardShape['id'])
+        const tgt = shapeMap.get(link.target_id as ChatCardShape['id'])
+        if (!src || !tgt) continue
+
+        const display = linkDisplayProps(link.strength, link.provenance)
+        if (!display.visible) continue
+
+        const srcBounds = editor.getShapePageBounds(src)
+        const tgtBounds = editor.getShapePageBounds(tgt)
+        if (!srcBounds || !tgtBounds) continue
+
+        const p1 = editor.pageToScreen({ x: srcBounds.midX, y: srcBounds.midY })
+        const p2 = editor.pageToScreen({ x: tgtBounds.midX, y: tgtBounds.midY })
+        newLines.push({ key: link.id, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, link })
+      }
+      setLines(newLines)
+    }
+
+    compute()
+    return editor.store.listen(compute)
+  }, [editor, links])
+
+  const handleLineClick = useCallback((e: React.MouseEvent, linkId: string) => {
+    e.stopPropagation()
+    setPopover(p => p?.linkId === linkId ? null : { linkId, x: e.clientX, y: e.clientY })
+  }, [])
+
+  const handleTrustAction = useCallback(async (linkId: string, action: 'keep' | 'dismiss' | 'remove') => {
+    setPopover(null)
+    const token = AUTH_TOKEN()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+
+    if (action === 'remove') {
+      await fetch(`${API_BASE}/links/${linkId}`, { method: 'DELETE', headers }).catch(() => {})
+    } else {
+      const provenance = action === 'keep' ? 'user-pinned' : 'dismissed'
+      await fetch(`${API_BASE}/links/${linkId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ provenance }),
+      }).catch(() => {})
+    }
+    void fetchAllLinks()
+  }, [fetchAllLinks])
+
+  if (lines.length === 0 && !popover) return null
+
+  return (
+    <>
+      <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}>
+        {lines.map(({ key, x1, y1, x2, y2, link }) => {
+          const display = linkDisplayProps(link.strength, link.provenance)
+          return (
+            <g
+              key={key}
+              style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+              onClick={(e) => handleLineClick(e, link.id)}
+            >
+              {link.rationale && <title>{link.rationale}</title>}
+              <line
+                x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="#6a9fd8"
+                strokeWidth={display.strokeWidth}
+                strokeOpacity={display.opacity}
+                strokeDasharray={display.strokeDasharray === 'none' ? undefined : display.strokeDasharray}
+                strokeLinecap="round"
+              />
+            </g>
+          )
+        })}
+      </svg>
+      {popover && (
+        <div
+          style={{
+            position: 'fixed',
+            left: popover.x,
+            top: popover.y,
+            zIndex: 10000,
+            background: '#fff',
+            border: '1px solid #ddd',
+            borderRadius: 6,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            padding: '6px 4px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            minWidth: 90,
+            fontFamily: 'system-ui, sans-serif',
+            fontSize: 12,
+          }}
+        >
+          <button style={popoverBtnStyle} onClick={() => { void handleTrustAction(popover.linkId, 'keep') }}>Keep</button>
+          <button style={popoverBtnStyle} onClick={() => { void handleTrustAction(popover.linkId, 'dismiss') }}>Dismiss</button>
+          <button style={{ ...popoverBtnStyle, color: '#c0392b' }} onClick={() => { void handleTrustAction(popover.linkId, 'remove') }}>Remove</button>
+        </div>
+      )}
+    </>
+  )
+}
+
+const popoverBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: '1px solid #e0e0e0',
+  borderRadius: 4,
+  padding: '4px 8px',
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontFamily: 'inherit',
+  fontSize: 12,
 }
 
 // ── MinimalToolbar (PEO-120) ─────────────────────────────────────────────────
@@ -255,8 +439,17 @@ function MinimalToolbar() {
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
+function CanvasOverlays() {
+  return (
+    <>
+      <TetherOverlay />
+      <LinkOverlay />
+    </>
+  )
+}
+
 const components = {
-  InFrontOfTheCanvas: TetherOverlay,
+  InFrontOfTheCanvas: CanvasOverlays,
   Toolbar: MinimalToolbar,
 }
 

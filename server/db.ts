@@ -74,5 +74,22 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
   // Unique pair index so linking runs can upsert (PEO-122)
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_links_pair ON artifact_links(source_id, target_id)`)
 
+  // Additive migrations for PEO-123
+  if (!linkColNames.includes('rationale')) {
+    db.exec(`ALTER TABLE artifact_links ADD COLUMN rationale TEXT`)
+  }
+
+  const feedbackCols = db.pragma('table_info(link_feedback)') as Array<{ name: string }>
+  if (feedbackCols.length === 0) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS link_feedback (
+        id TEXT PRIMARY KEY,
+        link_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    `)
+  }
+
   return db
 }
