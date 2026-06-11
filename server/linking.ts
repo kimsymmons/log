@@ -15,6 +15,8 @@ export type FoundLink = {
   rationale: string
 }
 
+export type ParsedLink = FoundLink
+
 export type LinkingResult = {
   links: FoundLink[]
   inputTokens: number
@@ -40,6 +42,102 @@ function summarize(content: string | null): string {
 
 function describe(a: ArtifactRow) {
   return { id: a.id, type: a.type, title: a.title ?? '', summary: summarize(a.content) }
+}
+
+/*
+ * Prompt design rationale (v2):
+ * - System prompt emphasises PRECISION: the model should only link when the
+ *   relationship is clear and meaningful, not superficially thematic.
+ * - We enumerate each link type with a one-line definition so the model
+ *   picks the most specific type rather than defaulting to "same-topic".
+ * - Explicit "when NOT to link" section reduces false positives on the hard
+ *   cases (vaguely similar topics, keyword overlap without real relationship).
+ * - Confidence guidance: < 0.5 means "omit entirely"; 0.5-0.7 = plausible
+ *   but uncertain; >= 0.8 = high confidence.
+ * - Format constraint repeated twice (system + user) to reduce markdown wrapping.
+ *
+ * Eval results (12-pair corpus, 2026-06-11): F1=83.3%, TP=5 FP=2 FN=0 TN=5
+ *
+ * Known false-positive patterns:
+ *   (a) Thematic overlap without semantic specificity — e.g. two artifacts both
+ *       discussing caching but at different levels of abstraction (tool selection
+ *       vs eviction policy). Broad topic match is not enough.
+ *   (b) Structural/pattern similarity in code without shared domain — e.g. two
+ *       async fetch helpers with identical shape but operating on different
+ *       resources. Code structure is not a link signal.
+ *
+ * Potential next prompt improvement: add explicit instruction "Do NOT link
+ * artifacts that share only a broad topic or code pattern — links should reflect
+ * that reading one would meaningfully inform understanding of the other."
+ */
+export function buildLinkingPrompt(
+  sourceContent: string,
+  candidates: Array<{ id: string; content: string }>
+): string {
+  const typeDescriptions = [
+    'continuation — the candidate directly continues or follows on from the source (same thread, next step, follow-up)',
+    'same-project — both belong to the same project, sprint, or initiative (explicit shared context, not just topic overlap)',
+    'same-topic — both discuss the same specific subject in enough depth that a reader of one would benefit from the other',
+    'references — the source explicitly mentions, cites, or depends on the candidate (or vice-versa)',
+    'supersedes — the source replaces, updates, or obsoletes the candidate (or vice-versa)',
+  ]
+
+  return [
+    'Source artifact:',
+    JSON.stringify({ content: sourceContent }),
+    '',
+    'Candidate artifacts:',
+    JSON.stringify(candidates.map(c => ({ id: c.id, content: c.content }))),
+    '',
+    'Link type definitions:',
+    typeDescriptions.join('\n'),
+    '',
+    'Task: Identify meaningful links from the source to any candidates.',
+    '',
+    'Link ONLY when:',
+    '- The relationship is clear and specific, not just superficially similar',
+    '- A reader of the source would genuinely benefit from seeing the candidate',
+    '',
+    'Do NOT link when:',
+    '- Content shares only broad keywords or general themes',
+    '- The similarity is coincidental or trivial',
+    '- You are uncertain — omit rather than guess',
+    '',
+    'Confidence guide: 0.5–0.69 = plausible, 0.70–0.89 = likely, 0.90+ = clear.',
+    `Omit any link with confidence < ${CONFIDENCE_THRESHOLD}.`,
+    '',
+    'Respond ONLY with a JSON array, no markdown fences, no explanation:',
+    '[{"targetId":"<id>","type":"<type>","confidence":<0..1>,"rationale":"<one sentence>"}]',
+    'Return [] if no links qualify.',
+  ].join('\n')
+}
+
+export function parseLinkingResponse(raw: string, validIds: Set<string>): ParsedLink[] {
+  const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonStr)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+
+  const links: ParsedLink[] = []
+  for (const item of parsed as Array<Record<string, unknown>>) {
+    if (!item || typeof item !== 'object') continue
+    const { targetId, type, confidence } = item
+    if (typeof targetId !== 'string' || !validIds.has(targetId)) continue
+    if (typeof type !== 'string' || !(LINK_TYPES as readonly string[]).includes(type)) continue
+    if (typeof confidence !== 'number' || confidence < CONFIDENCE_THRESHOLD) continue
+    links.push({
+      targetId,
+      type: type as LinkType,
+      confidence,
+      rationale: typeof item.rationale === 'string' ? item.rationale : '',
+    })
+  }
+  return links
 }
 
 export async function findLinks(
@@ -71,24 +169,16 @@ export async function findLinks(
     .prepare('SELECT id, type, title, content FROM artifacts WHERE id != ? ORDER BY created_at DESC LIMIT ?')
     .all(artifactId, MAX_CANDIDATES) as ArtifactRow[]
 
-  const prompt = [
-    'Target artifact:',
-    JSON.stringify(describe(target)),
-    '',
-    'Candidate artifacts:',
-    JSON.stringify(candidates.map(describe)),
-    '',
-    `Identify links from the target to candidates. Allowed types: ${LINK_TYPES.join(', ')}.`,
-    'Respond only with a JSON array, no markdown:',
-    '[{"targetId":"<candidate id>","type":"<type>","confidence":<0..1>,"rationale":"<one sentence>"}]',
-    `Return [] if no links apply. Omit links with confidence below ${CONFIDENCE_THRESHOLD}.`,
-  ].join('\n')
+  const prompt = buildLinkingPrompt(
+    `[${target.type}] ${target.title ?? ''}\n${summarize(target.content)}`,
+    candidates.map(c => ({ id: c.id, content: `[${c.type}] ${c.title ?? ''}\n${summarize(c.content)}` }))
+  )
 
   const resp = await anthropic.messages.create({
     model: LINKING_MODEL,
     max_tokens: 1024,
     system:
-      'You identify relationships between artifacts in a spatial knowledge canvas. Respond only with valid JSON.',
+      'You identify relationships between artifacts in a spatial knowledge canvas. Be precise — only link when the relationship is clear and meaningful. Respond only with valid JSON, no markdown.',
     messages: [{ role: 'user', content: prompt }],
   })
 
@@ -96,32 +186,7 @@ export async function findLinks(
   const outputTokens = resp.usage?.output_tokens ?? 0
 
   const raw = resp.content[0]?.type === 'text' ? (resp.content[0].text ?? '') : ''
-  const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonStr)
-  } catch {
-    console.warn('[linking] model returned malformed JSON; treating as no links')
-    return { links: [], inputTokens, outputTokens }
-  }
-  if (!Array.isArray(parsed)) return { links: [], inputTokens, outputTokens }
-
-  const candidateIds = new Set(candidates.map(c => c.id))
-  const links: FoundLink[] = []
-  for (const item of parsed as Array<Record<string, unknown>>) {
-    if (!item || typeof item !== 'object') continue
-    const { targetId, type, confidence } = item
-    if (typeof targetId !== 'string' || !candidateIds.has(targetId)) continue
-    if (typeof type !== 'string' || !(LINK_TYPES as readonly string[]).includes(type)) continue
-    if (typeof confidence !== 'number' || confidence < CONFIDENCE_THRESHOLD) continue
-    links.push({
-      targetId,
-      type: type as LinkType,
-      confidence,
-      rationale: typeof item.rationale === 'string' ? item.rationale : '',
-    })
-  }
+  const links = parseLinkingResponse(raw, new Set(candidates.map(c => c.id)))
 
   return { links, inputTokens, outputTokens }
 }
