@@ -307,6 +307,57 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
   })
 
+  // GET /links?artifactId=... — non-dismissed links for an artifact (PEO-123)
+  app.get('/links', requireAuth, (req: Request, res: Response) => {
+    const { artifactId } = req.query as { artifactId?: string }
+    if (!artifactId || typeof artifactId !== 'string') {
+      res.status(400).json({ error: 'artifactId is required' })
+      return
+    }
+    const rows = db.prepare(
+      `SELECT id, source_id, target_id, strength, provenance, rationale, link_type, created_at
+       FROM artifact_links
+       WHERE (source_id = ? OR target_id = ?) AND provenance != 'dismissed'`
+    ).all(artifactId, artifactId)
+    res.json(rows)
+  })
+
+  const VALID_PROVENANCE = new Set(['user-pinned', 'user-made', 'model-drawn', 'dismissed'])
+
+  // PATCH /links/:id — update provenance + log feedback (PEO-123)
+  app.patch('/links/:id', requireAuth, (req: Request, res: Response) => {
+    const { id } = req.params
+    const { provenance } = req.body as { provenance?: string }
+    if (!provenance || !VALID_PROVENANCE.has(provenance)) {
+      res.status(400).json({ error: 'provenance must be one of: user-pinned, user-made, model-drawn, dismissed' })
+      return
+    }
+    const existing = db.prepare('SELECT id FROM artifact_links WHERE id = ?').get(id)
+    if (!existing) {
+      res.status(404).json({ error: 'link not found' })
+      return
+    }
+    db.prepare('UPDATE artifact_links SET provenance = ? WHERE id = ?').run(provenance, id)
+    const action = provenance === 'dismissed' ? 'dismiss' : 'keep'
+    db.prepare(
+      'INSERT INTO link_feedback (id, link_id, action, created_at) VALUES (?, ?, ?, ?)'
+    ).run(ulid(), id, action, Date.now())
+    res.json({ ok: true })
+  })
+
+  // DELETE /links/:id — remove link + log feedback (PEO-123)
+  app.delete('/links/:id', requireAuth, (req: Request, res: Response) => {
+    const { id } = req.params
+    const existing = db.prepare('SELECT id FROM artifact_links WHERE id = ?').get(id)
+    if (!existing) {
+      res.status(404).json({ error: 'link not found' })
+      return
+    }
+    db.prepare('INSERT INTO link_feedback (id, link_id, action, created_at) VALUES (?, ?, ?, ?)').run(ulid(), id, 'remove', Date.now())
+    db.prepare('DELETE FROM artifact_links WHERE id = ?').run(id)
+    res.json({ ok: true })
+  })
+
   // GET /cost/summary
   app.get('/cost/summary', requireAuth, (req: Request, res: Response) => {
     const rows = db.prepare(
