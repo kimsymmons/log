@@ -11,7 +11,8 @@
     "build": "tsc && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "node scripts/bench-custom-shapes.js"
+    "bench": "node scripts/bench-custom-shapes.js",
+    "e2e:persistence": "node scripts/e2e-persistence.js"
   },
   "repository": {
     "type": "git",
