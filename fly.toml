@@ -1,0 +1,14 @@
+app = "log-kimsymmons"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile.server"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
