@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { BaseBoxShapeUtil, HTMLContainer, T, type TLBaseShape } from 'tldraw'
-import type { ArtifactType } from '../types/artifact'
+import type { ArtifactShapeType } from '../types/artifact'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -28,8 +28,8 @@ export function truncateContent(content: string, max = 40): string {
   return content.length > max ? content.slice(0, max) + '…' : content
 }
 
-export function artifactTypeToShapeType(type: ArtifactType): 'markdown-artifact' | 'code-artifact' | 'image-artifact' {
-  const map: Record<ArtifactType, 'markdown-artifact' | 'code-artifact' | 'image-artifact'> = {
+export function artifactTypeToShapeType(type: ArtifactShapeType): 'markdown-artifact' | 'code-artifact' | 'image-artifact' {
+  const map: Record<ArtifactShapeType, 'markdown-artifact' | 'code-artifact' | 'image-artifact'> = {
     markdown: 'markdown-artifact',
     code: 'code-artifact',
     image: 'image-artifact',
