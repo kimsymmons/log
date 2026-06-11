@@ -1,8 +1,29 @@
 import 'tldraw/tldraw.css'
-import { Tldraw } from 'tldraw'
+import {
+  Tldraw,
+  DefaultToolbar,
+  SelectToolbarItem,
+  HandToolbarItem,
+  DrawToolbarItem,
+  type TLComponents,
+} from 'tldraw'
 import { ChatCardShapeUtil } from '../shapes/ChatCard'
 
 const shapeUtils = [ChatCardShapeUtil]
+
+function MinimalToolbar() {
+  return (
+    <DefaultToolbar>
+      <SelectToolbarItem />
+      <HandToolbarItem />
+      <DrawToolbarItem />
+    </DefaultToolbar>
+  )
+}
+
+const components: TLComponents = {
+  Toolbar: MinimalToolbar,
+}
 
 export default function CanvasApp() {
   return (
@@ -10,6 +31,7 @@ export default function CanvasApp() {
       <Tldraw
         shapeUtils={shapeUtils}
         persistenceKey="log-canvas"
+        components={components}
       />
     </div>
   )
