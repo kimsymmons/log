@@ -47,6 +47,9 @@ function setupPersistence(editor: Editor) {
 }
 
 export default function App() {
+<<<<<<< feat/peo-112-interactions
+  return <CanvasApp />
+=======
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
       <Tldraw
@@ -58,4 +61,5 @@ export default function App() {
       />
     </div>
   )
+>>>>>>> main
 }
