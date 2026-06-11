@@ -41,5 +41,15 @@ export function getDb(path: string = 'log.db'): Database.Database {
     );
   `)
 
+  // Additive migration: add provenance and confidence to artifact_links if missing
+  const cols = db.pragma('table_info(artifact_links)') as Array<{ name: string }>
+  const colNames = cols.map(c => c.name)
+  if (!colNames.includes('provenance')) {
+    db.exec(`ALTER TABLE artifact_links ADD COLUMN provenance TEXT NOT NULL DEFAULT 'user-made'`)
+  }
+  if (!colNames.includes('confidence')) {
+    db.exec(`ALTER TABLE artifact_links ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0`)
+  }
+
   return db
 }

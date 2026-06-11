@@ -1,5 +1,7 @@
 export type ArtifactType = 'chat' | 'project' | 'note' | 'sketch'
 
+export type LinkProvenance = 'model-drawn' | 'user-pinned' | 'user-made' | 'dismissed'
+
 export interface Artifact {
   id: string
   type: ArtifactType
@@ -23,10 +25,15 @@ export interface ArtifactLink {
   strength: number
   link_type: string | null
   tags: string | null
+  provenance: LinkProvenance
+  confidence: number
   created_at: number
 }
 
-export type NewArtifactLink = Omit<ArtifactLink, 'id' | 'created_at'>
+export type NewArtifactLink = Omit<ArtifactLink, 'id' | 'created_at' | 'provenance' | 'confidence'> & {
+  provenance?: LinkProvenance
+  confidence?: number
+}
 
 export interface MemoryEntry {
   id: string
