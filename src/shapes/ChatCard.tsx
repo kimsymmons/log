@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   BaseBoxShapeUtil,
+  EditorContext,
   HTMLContainer,
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { useContext } from 'react'
+import { getLOD } from '../canvas/perf'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -25,189 +28,43 @@ export type ChatCardShape = TLBaseShape<'chat-card', {
   createdAt: number
 }>
 
-// ── State machine ──────────────────────────────────────────────────────────
-
-export function chatCardTransition(state: ChatCardState, event: ChatCardEvent): ChatCardState {
-  if (state === 'collapsed') {
-    if (event === 'expand') return 'expanded'
-    if (event === 'startStreaming') return 'streaming'
-  }
-  if (state === 'streaming') {
-    if (event === 'streamingDone') return 'expanded'
-  }
-  if (state === 'expanded') {
-    if (event === 'collapse') return 'collapsed'
-  }
-  return state
-}
-
-function relativeTime(ts: number): string {
-  const diff = Date.now() - ts
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-// ── Inner component (holds local UI state) ─────────────────────────────────
-
 function ChatCardInner({ shape }: { shape: ChatCardShape }) {
-  const [uiState, setUiState] = useState<ChatCardState>('collapsed')
-
-  const dispatch = useCallback((event: ChatCardEvent) => {
-    setUiState(prev => chatCardTransition(prev, event))
-  }, [])
-
-  // streaming stub: collapsed → streaming → expanded after 2s
-  const triggerStreamingStub = useCallback(() => {
-    dispatch('startStreaming')
-    const id = setTimeout(() => dispatch('streamingDone'), 2000)
-    return id
-  }, [dispatch])
-
-  // collapse on Escape key
-  useEffect(() => {
-    if (uiState !== 'expanded') return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') dispatch('collapse')
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [uiState, dispatch])
-
-  const { title, messages, summary, createdAt } = shape.props
-
-  if (uiState === 'collapsed') {
-    return (
-      <div
-        style={{
-          width: COLLAPSED_SIZE.w,
-          height: COLLAPSED_SIZE.h,
-          background: '#f7f7f7',
-          border: '1px solid #ccc',
-          borderRadius: 6,
-          padding: '8px 10px',
-          fontFamily: 'system-ui, sans-serif',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          cursor: 'pointer',
-          boxSizing: 'border-box',
-        }}
-        onClick={() => dispatch('expand')}
-      >
-        <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 11, color: '#555', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-          {summary || 'No summary yet.'}
-        </div>
-        <div style={{ fontSize: 10, color: '#999' }}>
-          {relativeTime(createdAt)}
-        </div>
-      </div>
-    )
-  }
-
-  if (uiState === 'streaming') {
-    return (
-      <div
-        style={{
-          width: COLLAPSED_SIZE.w,
-          height: COLLAPSED_SIZE.h,
-          background: '#f7f7f7',
-          border: '1px solid #ccc',
-          borderRadius: 6,
-          padding: '8px 10px',
-          fontFamily: 'system-ui, sans-serif',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          boxSizing: 'border-box',
-        }}
-      >
-        <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
-        <div style={{ fontSize: 11, color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <StreamingCursor />
-          <span>Thinking…</span>
-        </div>
-      </div>
-    )
-  }
-
-  // expanded
+  const editor = useContext(EditorContext)
+  const lod = getLOD(editor?.getCamera().z ?? 1)
   return (
-    <div
+    <HTMLContainer
       style={{
-        width: EXPANDED_SIZE.w,
-        height: EXPANDED_SIZE.h,
+        width: shape.props.w,
+        height: shape.props.h,
         background: '#fff',
-        border: '1px solid #ccc',
-        borderRadius: 6,
+        border: '1px solid #e2e8f0',
+        borderRadius: 8,
+        padding: '10px 12px',
         fontFamily: 'system-ui, sans-serif',
+        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        boxSizing: 'border-box',
-        overflow: 'hidden',
+        gap: 4,
+        pointerEvents: 'all',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
       }}
     >
-      {/* header */}
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{title}</span>
-        <button
-          onClick={() => dispatch('collapse')}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#888', padding: '0 2px' }}
-          aria-label="Collapse"
-        >
-          ×
-        </button>
+      <div style={{ fontWeight: 600, fontSize: 13, color: '#1a202c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {shape.props.title}
       </div>
-
-      {/* thread */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {messages.length === 0 && (
-          <div style={{ fontSize: 11, color: '#aaa' }}>No messages yet.</div>
-        )}
-        {messages.map((msg, i) => (
-          <div key={i} style={{ fontSize: 12, color: msg.role === 'user' ? '#1a1a1a' : '#555' }}>
-            <span style={{ fontWeight: 600 }}>{msg.role === 'user' ? 'You' : 'AI'}: </span>
-            {msg.content}
+      {lod === 'full' && (
+        <>
+          <div style={{ fontSize: 12, color: '#4a5568', flexGrow: 1, overflow: 'hidden' }}>
+            {shape.props.body}
           </div>
-        ))}
-      </div>
-
-      {/* input */}
-      <div style={{ padding: '6px 8px', borderTop: '1px solid #eee', display: 'flex', gap: 4 }}>
-        <input
-          placeholder="Send a message…"
-          style={{ flex: 1, fontSize: 12, border: '1px solid #ddd', borderRadius: 4, padding: '4px 6px' }}
-          onKeyDown={e => e.stopPropagation()}
-        />
-        <button
-          onClick={triggerStreamingStub}
-          style={{ fontSize: 11, padding: '4px 8px', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', background: '#f0f0f0' }}
-        >
-          Send
-        </button>
-      </div>
-    </div>
+          <div style={{ fontSize: 10, color: '#a0aec0' }}>
+            {new Date(shape.props.timestamp).toLocaleString()}
+          </div>
+        </>
+      )}
+    </HTMLContainer>
   )
 }
-
-function StreamingCursor() {
-  const [visible, setVisible] = useState(true)
-  useEffect(() => {
-    const id = setInterval(() => setVisible(v => !v), 400)
-    return () => clearInterval(id)
-  }, [])
-  return (
-    <span style={{ display: 'inline-block', width: 6, height: 12, background: visible ? '#555' : 'transparent', borderRadius: 1 }} />
-  )
-}
-
-// ── ShapeUtil ──────────────────────────────────────────────────────────────
 
 export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
   static override type = 'chat-card' as const
@@ -233,11 +90,7 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
   }
 
   component(shape: ChatCardShape) {
-    return (
-      <HTMLContainer style={{ pointerEvents: 'all' }}>
-        <ChatCardInner shape={shape} />
-      </HTMLContainer>
-    )
+    return <ChatCardInner shape={shape} />
   }
 
   indicator(shape: ChatCardShape) {
