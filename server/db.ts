@@ -101,5 +101,16 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     )
   `)
 
+  // Ink strokes table (PEO-126)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ink_strokes (
+      id TEXT PRIMARY KEY,
+      points TEXT NOT NULL,
+      color TEXT NOT NULL,
+      width REAL NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `)
+
   return db
 }
