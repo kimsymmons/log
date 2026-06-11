@@ -1,7 +1,13 @@
 import 'tldraw/tldraw.css'
-import React, { useState, useEffect } from 'react'
-import { Tldraw, useEditor, type Editor } from 'tldraw'
-import { ChatCardShapeUtil } from './shapes/ChatCard'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  Tldraw,
+  useEditor,
+  DefaultToolbar,
+  DefaultToolbarContent,
+  type Editor,
+} from 'tldraw'
+import { ChatCardShapeUtil, COLLAPSED_SIZE, type ChatCardShape } from './shapes/ChatCard'
 import {
   MarkdownArtifactShapeUtil,
   CodeArtifactShapeUtil,
@@ -9,7 +15,7 @@ import {
   ARTIFACT_COLLAPSED_SIZE,
   type AnyArtifactShape,
 } from './shapes/ArtifactShapes'
-import type { ChatCardShape } from './shapes/ChatCard'
+import { parseConversations, conversationToCardSeed } from './lib/importChats'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -23,6 +29,8 @@ declare global {
 }
 
 const ARTIFACT_TYPES = new Set(['markdown-artifact', 'code-artifact', 'image-artifact'])
+
+// ── TetherOverlay ────────────────────────────────────────────────────────────
 
 function TetherOverlay() {
   const editor = useEditor()
@@ -76,13 +84,148 @@ function TetherOverlay() {
   )
 }
 
+// ── MinimalToolbar ───────────────────────────────────────────────────────────
+
+function MinimalToolbar() {
+  const editor = useEditor()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    let raw: unknown
+    try {
+      raw = JSON.parse(await file.text())
+    } catch {
+      return
+    }
+
+    const conversations = parseConversations(raw)
+    if (conversations.length === 0) {
+      setToast('No valid conversations found')
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+
+    const bounds = editor.getViewportPageBounds()
+    const originX = bounds.x + bounds.w / 2 - (Math.min(conversations.length, 5) * 260) / 2
+    const originY = bounds.y + bounds.h / 2 - (Math.ceil(conversations.length / 5) * 160) / 2
+
+    const seeds = conversations.map((conv, i) => conversationToCardSeed(conv, i, originX, originY))
+
+    editor.batch(() => {
+      seeds.forEach(seed => {
+        editor.createShape<ChatCardShape>({
+          type: 'chat-card',
+          x: seed.x,
+          y: seed.y,
+          props: {
+            w: COLLAPSED_SIZE.w,
+            h: COLLAPSED_SIZE.h,
+            title: seed.title,
+            messages: seed.messages,
+            summary: seed.summary,
+            createdAt: seed.createdAt,
+          },
+        })
+      })
+    })
+
+    // Persist to backend — non-fatal if it fails
+    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+    const authToken = localStorage.getItem('auth_token') ?? ''
+    fetch(`${apiBase}/import/chats`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify(
+        conversations.map(conv => ({
+          type: 'chat',
+          title: conv.title,
+          content: JSON.stringify(conv.messages),
+          created_at: new Date(conv.created_at).getTime() || Date.now(),
+        }))
+      ),
+    }).catch(() => { /* non-fatal */ })
+
+    setToast(`Imported ${seeds.length} chats`)
+    setTimeout(() => setToast(null), 3000)
+  }, [editor])
+
+  return (
+    <>
+      <DefaultToolbar>
+        <DefaultToolbarContent />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: 'none' }}
+          onChange={e => { void handleImport(e) }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            height: 32,
+            padding: '0 10px',
+            border: '1px solid #e0e0e0',
+            borderRadius: 6,
+            background: '#fff',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Import chats
+        </button>
+      </DefaultToolbar>
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#1a1a1a',
+            color: '#fff',
+            padding: '8px 16px',
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: 'system-ui, sans-serif',
+            pointerEvents: 'none',
+            zIndex: 10000,
+          }}
+        >
+          {toast}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── App ──────────────────────────────────────────────────────────────────────
+
+const components = {
+  InFrontOfTheCanvas: TetherOverlay,
+  Toolbar: MinimalToolbar,
+}
+
 export default function App() {
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
       <Tldraw
         shapeUtils={shapeUtils}
         onMount={(editor) => { window.__tldrawEditor = editor }}
-        components={{ InFrontOfTheCanvas: TetherOverlay }}
+        components={components}
       />
     </div>
   )

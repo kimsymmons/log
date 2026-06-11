@@ -215,6 +215,36 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
   })
 
+  // POST /import/chats — bulk-insert conversations as artifacts
+  app.post('/import/chats', requireAuth, (req: Request, res: Response) => {
+    const body = req.body
+    if (!Array.isArray(body)) {
+      res.status(400).json({ error: 'body must be an array' })
+      return
+    }
+
+    const insert = db.prepare(
+      'INSERT INTO artifacts (id, type, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+
+    let count = 0
+    const now = Date.now()
+    for (const item of body as Array<Record<string, unknown>>) {
+      if (!item.title || typeof item.title !== 'string') continue
+      insert.run(
+        ulid(),
+        typeof item.type === 'string' ? item.type : 'chat',
+        item.title,
+        typeof item.content === 'string' ? item.content : '',
+        typeof item.created_at === 'number' ? item.created_at : now,
+        now
+      )
+      count++
+    }
+
+    res.json({ count })
+  })
+
   // GET /cost/summary
   app.get('/cost/summary', requireAuth, (req: Request, res: Response) => {
     const rows = db.prepare(
