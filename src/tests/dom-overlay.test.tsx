@@ -27,8 +27,9 @@ const mockShape: ChatCardShape = {
     w: 240,
     h: 120,
     title: 'DOM Overlay Test',
-    body: 'This is a real React div inside a tldraw shape.',
-    timestamp: '2026-06-11T00:00:00.000Z',
+    messages: [],
+    summary: 'A summary of the chat.',
+    createdAt: Date.now(),
   },
 }
 
@@ -43,13 +44,13 @@ describe('ChatCard DOM overlay', () => {
     expect(screen.getByText('DOM Overlay Test')).toBeTruthy()
   })
 
-  it('renders body text inside the shape', () => {
+  it('renders summary text inside the shape in collapsed state', () => {
     const util = Object.create(ChatCardShapeUtil.prototype) as ChatCardShapeUtil
     const element = util.component(mockShape)
 
     render(<>{element}</>)
 
-    expect(screen.getByText('This is a real React div inside a tldraw shape.')).toBeTruthy()
+    expect(screen.getByText('A summary of the chat.')).toBeTruthy()
   })
 
   it('the rendered node is an HTMLElement (not SVGElement)', () => {
