@@ -71,5 +71,8 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     db.exec(`ALTER TABLE artifact_links ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0`)
   }
 
+  // Unique pair index so linking runs can upsert (PEO-122)
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_artifact_links_pair ON artifact_links(source_id, target_id)`)
+
   return db
 }
