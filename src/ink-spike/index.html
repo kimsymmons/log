@@ -1,0 +1,434 @@
+<!--
+FINDINGS — PEO-125 Spike: Ink Latency on iPad Safari (researched 2026-06-11)
+=============================================================================
+Sources: Apple Dev Forums, caniuse.com, dbushell.com/2025/11/27/ios-web-browser-latency/,
+         tldraw PR #5554, webkit.org/blog/17862/webkit-features-for-safari-26-4/
+
+1. APPLE PENCIL LATENCY WITH POINTER EVENTS ON SAFARI
+   Apple Pencil hardware latency is ~9ms on modern iPads (native apps, Metal).
+   In Safari, Apple Pencil is indistinguishable from touch to JS — no dedicated
+   pencil latency APIs are exposed. Events can arrive at up to 240Hz (120Hz in
+   Low Power Mode) but the rendering path is fully main-thread-bound. Reliable
+   <20ms perceived latency in a browser canvas is NOT achievable under general
+   conditions; real-world measurements put it at 40–100ms depending on device load.
+
+2. desynchronized: true ON iOS SAFARI
+   `desynchronized: true` is a Chrome-first feature that bypasses the compositor
+   for canvas buffers. It is NOT confirmed supported on iOS Safari — the hint is
+   accepted without error but WebKit documentation and Safari 26.4 release notes
+   make no mention of it. Treat as silently ignored on iOS; test empirically.
+   (Chrome/Android: confirmed 1–2 frame latency reduction. Not relevant for iPad.)
+
+3. PointerEvent.getCoalescedEvents() ON iOS SAFARI
+   NOT supported on iOS Safari (caniuse.com, Apple Developer Forums). This is a
+   significant gap: coalesced events are the primary browser mechanism for capturing
+   high-frequency intermediate pointer samples between rendered frames, which
+   directly improves stroke smoothness at high draw speed. On iOS Safari the fallback
+   is to accept single pointermove events per rAF, with no recovery of dropped samples.
+
+4. TLDRAW v3 INK / DRAWING TECHNIQUES
+   tldraw v3 DOES call `getCoalescedEvents()` in its useCanvasEvents hook (PR #5554,
+   shipped in v3.12.0) to dispatch all intermediate pointer positions and improve
+   stroke fidelity. However this silently degrades to single-event mode on iOS Safari,
+   meaning tldraw's draw tool has the same structural limitation. tldraw does not use
+   `desynchronized` canvas; it renders strokes as SVG paths via React using
+   `perfect-freehand` for outline computation.
+
+RECOMMENDATION: REDUCE SCOPE — proceed with M3 ink layer, but revise expectations
+   The <20ms target is NOT reliably achievable on iPad Safari with current browser
+   APIs. The two key optimisation levers (desynchronized canvas + getCoalescedEvents)
+   are both unavailable on iOS Safari. Recommended approach:
+     (a) Build the M3 ink layer as a raw canvas overlay (not inside tldraw's SVG
+         pipeline) — this is still the right architecture.
+     (b) Use getCoalescedEvents() where available (Chrome/Edge desktop — it WILL
+         help there); guard it with feature detection for Safari fallback.
+     (c) Set product expectation at "pen-class" (~40ms) not "Notes-class" (~9ms)
+         for iPad Safari. This is acceptable for annotation/sketching flows but
+         noticeable for fast calligraphy-style handwriting.
+     (d) Consider a "fast ink" pre-render pass: draw raw dots synchronously in
+         pointermove (no rAF) as a visual-only layer, then composite the clean
+         perfect-freehand stroke on top. This is the technique used by Procreate
+         web previews and gives better perceived latency than pure rAF.
+     (e) Test on-device early — do not rely on simulator measurements.
+
+=============================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>PEO-125 — Ink Latency Spike</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; }
+
+    #tabs {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      gap: 2px;
+      background: rgba(0,0,0,0.7);
+      padding: 6px 6px 0;
+    }
+    .tab {
+      padding: 6px 18px;
+      border-radius: 6px 6px 0 0;
+      background: rgba(255,255,255,0.1);
+      color: #aaa;
+      font: 13px/1.4 ui-monospace, monospace;
+      cursor: pointer;
+      border: none;
+      outline: none;
+    }
+    .tab.active { background: rgba(255,255,255,0.22); color: #fff; }
+
+    .view { display: none; position: absolute; inset: 36px 0 0 0; }
+    .view.active { display: block; }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    #stats, #stats2 {
+      position: absolute;
+      top: 10px; left: 10px;
+      background: rgba(0,0,0,0.65);
+      color: #0f0;
+      font: 13px/1.6 ui-monospace, monospace;
+      padding: 8px 12px;
+      border-radius: 6px;
+      pointer-events: none;
+      min-width: 220px;
+    }
+
+    #clear-btn, #clear-btn2 {
+      position: absolute;
+      bottom: 20px; right: 20px;
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      font: 14px ui-monospace, monospace;
+      cursor: pointer;
+    }
+
+    #hint {
+      position: absolute;
+      bottom: 70px; left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.35);
+      font: 12px ui-sans-serif, system-ui, sans-serif;
+      text-align: center;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="tabs">
+  <button class="tab active" data-view="raw">Raw rAF</button>
+  <button class="tab" data-view="freehand">perfect-freehand</button>
+</div>
+
+<!-- ── VIEW 1: Raw rAF latency probe ─────────────────────────────────────── -->
+<div id="view-raw" class="view active">
+  <canvas id="canvas-raw"></canvas>
+  <div id="stats">
+    <div>Mode: raw rAF circle</div>
+    <div id="s-last">Last:  —</div>
+    <div id="s-avg">Avg:   —</div>
+    <div id="s-p90">P90:   —</div>
+    <div id="s-pressure">Pressure: —</div>
+    <div id="s-coalesced">Coalesced: —</div>
+  </div>
+  <div id="hint">Draw with Apple Pencil or finger</div>
+  <button id="clear-btn">Clear</button>
+</div>
+
+<!-- ── VIEW 2: perfect-freehand smooth stroke ─────────────────────────────── -->
+<div id="view-freehand" class="view">
+  <canvas id="canvas-freehand"></canvas>
+  <div id="stats2">
+    <div>Mode: perfect-freehand</div>
+    <div id="s2-last">Last:  —</div>
+    <div id="s2-avg">Avg:   —</div>
+    <div id="s2-p90">P90:   —</div>
+    <div id="s2-pressure">Pressure: —</div>
+  </div>
+  <button id="clear-btn2">Clear</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/perfect-freehand@1.2.2/dist/perfect-freehand.umd.js"></script>
+
+<script>
+// ── Shared helpers ──────────────────────────────────────────────────────────
+
+function p90(arr) {
+  if (!arr.length) return 0;
+  const s = arr.slice().sort((a, b) => a - b);
+  return s[Math.floor(s.length * 0.9)];
+}
+
+function avg(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function ms(v) { return v.toFixed(1) + ' ms'; }
+
+// ── Tab switching ───────────────────────────────────────────────────────────
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VIEW 1 — Raw rAF latency probe
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function initRaw() {
+  const canvas = document.getElementById('canvas-raw');
+  const ctx = canvas.getContext('2d', { desynchronized: true });
+
+  function resize() {
+    const r = window.devicePixelRatio || 1;
+    canvas.width  = canvas.offsetWidth  * r;
+    canvas.height = canvas.offsetHeight * r;
+    ctx.scale(r, r);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const samples = [];      // latency ring buffer (last 100)
+  const MAX = 100;
+
+  // Queue of { x, y, pressure, eventTs } waiting to be painted on next rAF
+  let pending = null;
+  let rafPending = false;
+
+  function onPointerMove(e) {
+    e.preventDefault();
+
+    // Use getCoalescedEvents if available — take the last coalesced point for
+    // latency measurement, but queue it with the original event timestamp.
+    let points = [e];
+    if (typeof e.getCoalescedEvents === 'function') {
+      const coalesced = e.getCoalescedEvents();
+      if (coalesced.length > 0) points = coalesced;
+    }
+
+    const last = points[points.length - 1];
+    pending = {
+      x: last.clientX,
+      y: last.clientY - 36, // offset for tab bar (36px)
+      pressure: last.pressure ?? 0.5,
+      eventTs: last.timeStamp,
+      coalesced: points.length,
+    };
+
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(paint);
+    }
+  }
+
+  function paint(rafTs) {
+    rafPending = false;
+    if (!pending) return;
+
+    const { x, y, pressure, eventTs, coalesced } = pending;
+    pending = null;
+
+    const latency = rafTs - eventTs;
+    if (latency >= 0 && latency < 500) { // sanity gate
+      samples.push(latency);
+      if (samples.length > MAX) samples.shift();
+    }
+
+    const r = pressure * 8 + 2;
+
+    // Draw dot
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsl(${200 + pressure * 60}, 80%, 65%)`;
+    ctx.fill();
+
+    // Update HUD
+    document.getElementById('s-last').textContent     = 'Last:     ' + ms(latency);
+    document.getElementById('s-avg').textContent      = 'Avg:      ' + ms(avg(samples));
+    document.getElementById('s-p90').textContent      = 'P90:      ' + ms(p90(samples));
+    document.getElementById('s-pressure').textContent = 'Pressure: ' + pressure.toFixed(3);
+    document.getElementById('s-coalesced').textContent = 'Coalesced: ' + coalesced;
+  }
+
+  canvas.addEventListener('pointermove', onPointerMove, { passive: false });
+  canvas.addEventListener('pointerdown', onPointerMove, { passive: false });
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    const r = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width / r, canvas.height / r);
+    samples.length = 0;
+    document.getElementById('s-last').textContent = 'Last:  —';
+    document.getElementById('s-avg').textContent  = 'Avg:   —';
+    document.getElementById('s-p90').textContent  = 'P90:   —';
+  });
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VIEW 2 — perfect-freehand smooth stroke
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function initFreehand() {
+  const canvas = document.getElementById('canvas-freehand');
+  const ctx = canvas.getContext('2d', { desynchronized: true });
+
+  function resize() {
+    const r = window.devicePixelRatio || 1;
+    canvas.width  = canvas.offsetWidth  * r;
+    canvas.height = canvas.offsetHeight * r;
+    ctx.scale(r, r);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const samples = [];
+  const MAX = 100;
+
+  // Current stroke accumulates [x, y, pressure] tuples
+  let currentStroke = [];
+  let allStrokes = [];   // completed strokes
+  let isDown = false;
+  let pending = null;
+  let rafPending = false;
+
+  function getSvgPathFromStroke(pts) {
+    if (!pts.length) return '';
+    const d = pts.reduce((acc, [x0, y0], i, arr) => {
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      return acc + `${x0},${y0} ${(x0 + x1) / 2},${(y0 + y1) / 2} `;
+    }, `M ${pts[0][0]},${pts[0][1]} Q `);
+    return d + 'Z';
+  }
+
+  function drawStrokes() {
+    const r = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width / r, canvas.height / r);
+
+    const toDraw = isDown
+      ? [...allStrokes, currentStroke]
+      : allStrokes;
+
+    ctx.fillStyle = '#c8b8f0';
+
+    for (const pts of toDraw) {
+      if (!pts.length) continue;
+      const outlinePoints = getStroke(pts, {
+        size: 6,
+        thinning: 0.5,
+        smoothing: 0.5,
+        streamline: 0.5,
+      });
+      const pathData = getSvgPathFromStroke(outlinePoints);
+      if (pathData) {
+        const p = new Path2D(pathData);
+        ctx.fill(p);
+      }
+    }
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    isDown = true;
+    currentStroke = [];
+    const y = e.clientY - 36;
+    currentStroke.push([e.clientX, y, e.pressure ?? 0.5]);
+    queuePaint(e);
+  }
+
+  function onPointerMove(e) {
+    if (!isDown) return;
+    e.preventDefault();
+    queuePaint(e);
+  }
+
+  function onPointerUp(e) {
+    e.preventDefault();
+    if (isDown && currentStroke.length) {
+      allStrokes.push(currentStroke);
+      currentStroke = [];
+    }
+    isDown = false;
+  }
+
+  function queuePaint(e) {
+    let points = [e];
+    if (typeof e.getCoalescedEvents === 'function') {
+      const coalesced = e.getCoalescedEvents();
+      if (coalesced.length > 0) points = coalesced;
+    }
+
+    for (const pt of points) {
+      currentStroke.push([pt.clientX, pt.clientY - 36, pt.pressure ?? 0.5]);
+    }
+
+    const last = points[points.length - 1];
+    pending = { eventTs: last.timeStamp, pressure: last.pressure ?? 0.5 };
+
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(paint);
+    }
+  }
+
+  function paint(rafTs) {
+    rafPending = false;
+    if (!pending) return;
+
+    const { eventTs, pressure } = pending;
+    pending = null;
+
+    const latency = rafTs - eventTs;
+    if (latency >= 0 && latency < 500) {
+      samples.push(latency);
+      if (samples.length > MAX) samples.shift();
+    }
+
+    drawStrokes();
+
+    document.getElementById('s2-last').textContent     = 'Last:     ' + ms(latency);
+    document.getElementById('s2-avg').textContent      = 'Avg:      ' + ms(avg(samples));
+    document.getElementById('s2-p90').textContent      = 'P90:      ' + ms(p90(samples));
+    document.getElementById('s2-pressure').textContent = 'Pressure: ' + pressure.toFixed(3);
+  }
+
+  canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+  canvas.addEventListener('pointermove', onPointerMove, { passive: false });
+  canvas.addEventListener('pointerup',   onPointerUp,   { passive: false });
+  canvas.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+  document.getElementById('clear-btn2').addEventListener('click', () => {
+    allStrokes = [];
+    currentStroke = [];
+    isDown = false;
+    const r = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width / r, canvas.height / r);
+    samples.length = 0;
+    document.getElementById('s2-last').textContent = 'Last:  —';
+    document.getElementById('s2-avg').textContent  = 'Avg:   —';
+    document.getElementById('s2-p90').textContent  = 'P90:   —';
+  });
+})();
+</script>
+</body>
+</html>
