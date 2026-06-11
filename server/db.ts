@@ -54,6 +54,13 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     );
   `)
 
+  // Additive migration: artifact_id on inference_log (PEO-118)
+  const infLogCols = db.pragma('table_info(inference_log)') as Array<{ name: string }>
+  const infLogColNames = infLogCols.map(c => c.name)
+  if (!infLogColNames.includes('artifact_id')) {
+    db.exec(`ALTER TABLE inference_log ADD COLUMN artifact_id TEXT NOT NULL DEFAULT ''`)
+  }
+
   // Additive migrations for artifact_links columns added in peo-115
   const linkCols = db.pragma('table_info(artifact_links)') as Array<{ name: string }>
   const linkColNames = linkCols.map(c => c.name)

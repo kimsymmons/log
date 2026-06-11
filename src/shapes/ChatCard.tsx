@@ -4,6 +4,7 @@ import {
   HTMLContainer,
   T,
   type TLBaseShape,
+  type Editor,
 } from 'tldraw'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,56 @@ export function chatCardTransition(state: ChatCardState, event: ChatCardEvent): 
   return state
 }
 
+// ── SSE parsing ────────────────────────────────────────────────────────────
+
+export type SseEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'summary'; title: string; body: string }
+  | { type: 'error'; message: string }
+  | { type: 'done' }
+
+export function parseSseData(data: string): SseEvent | null {
+  if (data === '[DONE]') return { type: 'done' }
+  try {
+    const obj = JSON.parse(data) as Record<string, unknown>
+    if (typeof obj.delta === 'string') return { type: 'delta', text: obj.delta }
+    if (obj.summary && typeof obj.summary === 'object') {
+      const s = obj.summary as { title?: string; body?: string }
+      return { type: 'summary', title: s.title ?? '', body: s.body ?? '' }
+    }
+    if (typeof obj.error === 'string') return { type: 'error', message: obj.error }
+  } catch {
+    // malformed
+  }
+  return null
+}
+
+async function* readSseLines(response: Response): AsyncGenerator<SseEvent> {
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const parsed = parseSseData(line.slice(6))
+        if (parsed) yield parsed
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+function getEditor(): Editor | null {
+  return (window as typeof window & { __tldrawEditor?: Editor }).__tldrawEditor ?? null
+}
+
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts
   const mins = Math.floor(diff / 60_000)
@@ -52,21 +103,16 @@ function relativeTime(ts: number): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-// ── Inner component (holds local UI state) ─────────────────────────────────
+// ── Inner component ────────────────────────────────────────────────────────
 
 function ChatCardInner({ shape }: { shape: ChatCardShape }) {
   const [uiState, setUiState] = useState<ChatCardState>('collapsed')
+  const [inputValue, setInputValue] = useState('')
+  const [streamedContent, setStreamedContent] = useState('')
 
   const dispatch = useCallback((event: ChatCardEvent) => {
     setUiState(prev => chatCardTransition(prev, event))
   }, [])
-
-  // streaming stub: auto-transition streaming → expanded after 2s
-  useEffect(() => {
-    if (uiState !== 'streaming') return
-    const id = setTimeout(() => dispatch('streamingDone'), 2000)
-    return () => clearTimeout(id)
-  }, [uiState, dispatch])
 
   // collapse on Escape key when expanded
   useEffect(() => {
@@ -79,6 +125,79 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
   }, [uiState, dispatch])
 
   const { title, messages, summary, createdAt } = shape.props
+
+  const handleSend = useCallback(async () => {
+    const content = inputValue.trim()
+    if (!content) return
+
+    setInputValue('')
+    setStreamedContent('')
+    dispatch('startStreaming')
+
+    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+    const authToken = localStorage.getItem('auth_token') ?? ''
+
+    try {
+      const response = await fetch(`${apiBase}/inference`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          artifactId: shape.id,
+          modelId: 'claude-sonnet-4-6',
+          messages: [...messages, { role: 'user', content }],
+          stream: true,
+        }),
+      })
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      let accumulated = ''
+      for await (const event of readSseLines(response)) {
+        if (event.type === 'delta') {
+          accumulated += event.text
+          setStreamedContent(accumulated)
+        } else if (event.type === 'summary') {
+          const editor = getEditor()
+          if (editor) {
+            editor.updateShape<ChatCardShape>({
+              id: shape.id,
+              type: 'chat-card',
+              props: {
+                title: event.title,
+                summary: event.body,
+                messages: [
+                  ...messages,
+                  { role: 'user', content },
+                  { role: 'assistant', content: accumulated },
+                ],
+              },
+            })
+          }
+        } else if (event.type === 'error') {
+          throw new Error(event.message)
+        } else if (event.type === 'done') {
+          break
+        }
+      }
+
+      dispatch('streamingDone')
+    } catch (err) {
+      const editor = getEditor()
+      if (editor) {
+        editor.updateShape<ChatCardShape>({
+          id: shape.id,
+          type: 'chat-card',
+          props: { summary: `Error: ${(err as Error).message}` },
+        })
+      }
+      dispatch('collapse')
+    }
+  }, [inputValue, messages, shape.id, dispatch])
+
+  // ── Collapsed ──────────────────────────────────────────────────────────
 
   if (uiState === 'collapsed') {
     return (
@@ -112,6 +231,8 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
     )
   }
 
+  // ── Streaming ──────────────────────────────────────────────────────────
+
   if (uiState === 'streaming') {
     return (
       <div
@@ -130,15 +251,25 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
         }}
       >
         <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
-        <div style={{ fontSize: 11, color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <StreamingCursor />
-          <span>Thinking…</span>
+        <div style={{ fontSize: 11, color: '#555', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+          {streamedContent ? (
+            <span style={{ overflow: 'hidden', maxHeight: 48 }}>
+              {streamedContent}
+              <StreamingCursor />
+            </span>
+          ) : (
+            <>
+              <StreamingCursor />
+              <span>Thinking…</span>
+            </>
+          )}
         </div>
       </div>
     )
   }
 
-  // expanded
+  // ── Expanded ───────────────────────────────────────────────────────────
+
   return (
     <div
       style={{
@@ -182,12 +313,17 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
       {/* input */}
       <div style={{ padding: '6px 8px', borderTop: '1px solid #eee', display: 'flex', gap: 4 }}>
         <input
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
           placeholder="Send a message…"
           style={{ flex: 1, fontSize: 12, border: '1px solid #ddd', borderRadius: 4, padding: '4px 6px' }}
-          onKeyDown={e => e.stopPropagation()}
+          onKeyDown={e => {
+            e.stopPropagation()
+            if (e.key === 'Enter') void handleSend()
+          }}
         />
         <button
-          onClick={() => dispatch('startStreaming')}
+          onClick={() => void handleSend()}
           style={{ fontSize: 11, padding: '4px 8px', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', background: '#f0f0f0' }}
         >
           Send

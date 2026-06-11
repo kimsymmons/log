@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express'
 import Database from 'better-sqlite3'
 import { ulid } from 'ulid'
+import Anthropic from '@anthropic-ai/sdk'
 import { getServerDb } from './db'
 import { sendMagicLink } from './email'
 import { signToken, verifyToken } from './jwt'
@@ -38,7 +39,20 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
   next()
 }
 
-export function createApp(db: Database.Database) {
+// Minimal interface so tests can inject a mock without importing the real SDK
+export type AnthropicLike = {
+  messages: {
+    stream(params: object): AsyncIterable<unknown> & {
+      finalMessage(): Promise<{ usage: { input_tokens: number; output_tokens: number } }>
+    }
+    create(params: object): Promise<{
+      content: Array<{ type: string; text?: string }>
+      usage?: { input_tokens: number; output_tokens: number }
+    }>
+  }
+}
+
+export function createApp(db: Database.Database, anthropicOverride?: AnthropicLike) {
   const app = express()
   app.use(express.json())
 
@@ -99,25 +113,106 @@ export function createApp(db: Database.Database) {
     res.json({ email: user.email })
   })
 
-  // POST /inference
+  // POST /inference — SSE streaming proxy to Anthropic
   app.post('/inference', requireAuth, async (req: Request, res: Response) => {
-    const { feature = 'unknown', model = 'claude-sonnet-4-6', messages = [] } = req.body as {
-      feature?: string
-      model?: string
-      messages?: unknown[]
+    const {
+      artifactId = 'unknown',
+      modelId = 'claude-sonnet-4-6',
+      messages = [],
+    } = req.body as {
+      artifactId?: string
+      modelId?: string
+      messages?: Array<{ role: string; content: string }>
+      stream?: boolean
     }
 
-    // Stub: record the request and return a placeholder response
-    // Real Anthropic proxy will be implemented in PEO-118
-    const inputTokens = JSON.stringify(messages).length / 4 | 0
-    const outputTokens = 100
-    const costUsd = estimateCost(model, inputTokens, outputTokens)
+    let anthropic: AnthropicLike
+    if (anthropicOverride) {
+      anthropic = anthropicOverride
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) {
+        res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
+        return
+      }
+      anthropic = new Anthropic({ apiKey })
+    }
 
-    db.prepare(
-      'INSERT INTO inference_log (id, feature, model, input_tokens, output_tokens, cost_usd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(ulid(), feature, model, inputTokens, outputTokens, costUsd, Date.now())
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders()
+    let accumulatedContent = ''
+    let inputTokens = 0
+    let outputTokens = 0
 
-    res.json({ message: 'Inference stub — full proxy in PEO-118', model, inputTokens, outputTokens })
+    try {
+      const streamResp = anthropic.messages.stream({
+        model: modelId,
+        max_tokens: 1024,
+        messages: messages as Array<{ role: 'user' | 'assistant'; content: string }>,
+      })
+
+      for await (const event of streamResp) {
+        if (
+          event.type === 'content_block_delta' &&
+          event.delta.type === 'text_delta'
+        ) {
+          const text = event.delta.text
+          accumulatedContent += text
+          res.write(`data: ${JSON.stringify({ delta: text })}\n\n`)
+        }
+      }
+
+      const finalMsg = await streamResp.finalMessage()
+      inputTokens = finalMsg.usage.input_tokens
+      outputTokens = finalMsg.usage.output_tokens
+
+      // Auto-summary via haiku
+      let summaryTitle = artifactId
+      let summaryBody = ''
+      try {
+        const summaryResp = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          messages: [
+            ...(messages as Array<{ role: 'user' | 'assistant'; content: string }>),
+            { role: 'assistant', content: accumulatedContent },
+            {
+              role: 'user',
+              content:
+                'Summarise this conversation as JSON only: {"title":"short title","body":"one sentence"}. No markdown, no other text.',
+            },
+          ],
+        })
+        inputTokens += summaryResp.usage?.input_tokens ?? 0
+        outputTokens += summaryResp.usage?.output_tokens ?? 0
+        const raw = summaryResp.content[0]?.type === 'text' ? summaryResp.content[0].text : ''
+        const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+        const parsed = JSON.parse(jsonStr) as { title?: string; body?: string }
+        summaryTitle = parsed.title ?? summaryTitle
+        summaryBody = parsed.body ?? ''
+      } catch {
+        summaryBody = accumulatedContent.slice(0, 120)
+      }
+
+      res.write(`data: ${JSON.stringify({ summary: { title: summaryTitle, body: summaryBody } })}\n\n`)
+      res.write('data: [DONE]\n\n')
+    } catch (err) {
+      const msg = (err as Error).message ?? 'Inference failed'
+      res.write(`data: ${JSON.stringify({ error: msg })}\n\n`)
+      res.write('data: [DONE]\n\n')
+    } finally {
+      try {
+        const costUsd = estimateCost(modelId, inputTokens, outputTokens)
+        db.prepare(
+          'INSERT INTO inference_log (id, feature, model, input_tokens, output_tokens, cost_usd, artifact_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(ulid(), artifactId, modelId, inputTokens, outputTokens, costUsd, artifactId, Date.now())
+      } catch {
+        // don't fail the response if logging throws
+      }
+      res.end()
+    }
   })
 
   // GET /cost/summary

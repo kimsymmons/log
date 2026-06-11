@@ -2,6 +2,7 @@
 // Source: Anthropic and OpenAI pricing pages
 const PRICING: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-6': { input: 3 / 1_000_000, output: 15 / 1_000_000 },
+  'claude-haiku-4-5-20251001': { input: 0.8 / 1_000_000, output: 4 / 1_000_000 },
   'gpt-4o': { input: 2.5 / 1_000_000, output: 10 / 1_000_000 },
   'gpt-4o-mini': { input: 0.15 / 1_000_000, output: 0.6 / 1_000_000 },
 }

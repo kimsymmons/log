@@ -27,6 +27,7 @@
   },
   "homepage": "https://github.com/kimsymmons/log#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@vitejs/plugin-react": "^6.0.2",
     "better-sqlite3": "^12.10.0",
     "express": "^5.2.1",
