@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   BaseBoxShapeUtil,
   EditorContext,
@@ -8,12 +9,23 @@ import {
 import { useContext } from 'react'
 import { getLOD } from '../canvas/perf'
 
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export type Message = { role: 'user' | 'assistant'; content: string }
+
+export type ChatCardState = 'collapsed' | 'expanded' | 'streaming'
+export type ChatCardEvent = 'expand' | 'collapse' | 'startStreaming' | 'streamingDone'
+
+export const COLLAPSED_SIZE = { w: 240, h: 120 }
+export const EXPANDED_SIZE = { w: 400, h: 500 }
+
 export type ChatCardShape = TLBaseShape<'chat-card', {
   w: number
   h: number
   title: string
-  body: string
-  timestamp: string
+  messages: Message[]
+  summary: string
+  createdAt: number
 }>
 
 function ChatCardInner({ shape }: { shape: ChatCardShape }) {
@@ -61,17 +73,19 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     w: T.number,
     h: T.number,
     title: T.string,
-    body: T.string,
-    timestamp: T.string,
+    messages: T.arrayOf(T.object({ role: T.string, content: T.string })),
+    summary: T.string,
+    createdAt: T.number,
   }
 
   getDefaultProps(): ChatCardShape['props'] {
     return {
-      w: 240,
-      h: 120,
+      w: COLLAPSED_SIZE.w,
+      h: COLLAPSED_SIZE.h,
       title: 'Untitled Chat',
-      body: 'Chat body goes here.',
-      timestamp: new Date().toISOString(),
+      messages: [],
+      summary: '',
+      createdAt: Date.now(),
     }
   }
 
@@ -80,6 +94,6 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
   }
 
   indicator(shape: ChatCardShape) {
-    return <rect width={shape.props.w} height={shape.props.h} rx={8} />
+    return <rect width={shape.props.w} height={shape.props.h} rx={6} />
   }
 }
