@@ -4,6 +4,5 @@ COPY package*.json ./
 RUN apk add --no-cache python3 make g++
 RUN npm ci --production
 COPY server/ ./server/
-RUN npm run build:server
 EXPOSE 3001
-CMD ["node", "dist/server/main.js"]
+CMD ["npx", "tsx", "server/index.ts"]
