@@ -6,6 +6,7 @@ import { getServerDb } from './db'
 import { sendMagicLink } from './email'
 import { signToken, verifyToken } from './jwt'
 import { estimateCost } from './cost'
+import { findLinks, LINKING_MODEL } from './linking'
 
 interface AuthToken {
   id: string
@@ -243,6 +244,67 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
 
     res.json({ count })
+  })
+
+  // POST /linking/run — model-drawn links for one artifact (PEO-122)
+  app.post('/linking/run', requireAuth, async (req: Request, res: Response) => {
+    const { artifactId } = req.body as { artifactId?: string }
+    if (!artifactId || typeof artifactId !== 'string') {
+      res.status(400).json({ error: 'artifactId is required' })
+      return
+    }
+
+    let anthropic: AnthropicLike
+    if (anthropicOverride) {
+      anthropic = anthropicOverride
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) {
+        res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
+        return
+      }
+      anthropic = new Anthropic({ apiKey })
+    }
+
+    let inputTokens = 0
+    let outputTokens = 0
+
+    try {
+      const result = await findLinks(db, artifactId, anthropic)
+      inputTokens = result.inputTokens
+      outputTokens = result.outputTokens
+
+      const upsert = db.prepare(
+        `INSERT INTO artifact_links (id, source_id, target_id, strength, link_type, provenance, confidence, created_at)
+         VALUES (?, ?, ?, ?, ?, 'model-drawn', ?, ?)
+         ON CONFLICT(source_id, target_id) DO UPDATE SET
+           strength = excluded.strength,
+           link_type = excluded.link_type,
+           provenance = excluded.provenance,
+           confidence = excluded.confidence`
+      )
+      const now = Date.now()
+      for (const link of result.links) {
+        upsert.run(ulid(), artifactId, link.targetId, link.confidence, link.type, link.confidence, now)
+      }
+
+      res.json({ linked: result.links.length })
+    } catch (err) {
+      const msg = (err as Error).message ?? 'Linking failed'
+      res.status(msg === 'artifact not found' ? 404 : 500).json({ error: msg })
+    } finally {
+      // Log actual spend only — skipped runs (no candidates / cost ceiling) make no API call
+      if (inputTokens > 0 || outputTokens > 0) {
+        try {
+          const costUsd = estimateCost(LINKING_MODEL, inputTokens, outputTokens)
+          db.prepare(
+            'INSERT INTO inference_log (id, feature, model, input_tokens, output_tokens, cost_usd, artifact_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          ).run(ulid(), 'linking', LINKING_MODEL, inputTokens, outputTokens, costUsd, artifactId, Date.now())
+        } catch {
+          // don't fail the response if logging throws
+        }
+      }
+    }
   })
 
   // GET /cost/summary
