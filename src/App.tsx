@@ -1,5 +1,6 @@
 import 'tldraw/tldraw.css'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Button, CanvasToolbar } from './design-system'
 import {
   Tldraw,
   useEditor,
@@ -283,22 +284,22 @@ function LinkOverlay() {
             left: popover.x,
             top: popover.y,
             zIndex: 10000,
-            background: '#fff',
-            border: '1px solid #ddd',
-            borderRadius: 6,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            background: 'var(--bg-overlay)',
+            border: '1px solid var(--border-1)',
+            borderRadius: 'var(--radius-3)',
+            boxShadow: 'var(--shadow-menu)',
             padding: '6px 4px',
             display: 'flex',
             flexDirection: 'column',
             gap: 4,
             minWidth: 90,
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: 12,
+            fontFamily: 'var(--font-ui)',
+            fontSize: 'var(--text-xs)',
           }}
         >
           <button style={popoverBtnStyle} onClick={() => { void handleTrustAction(popover.linkId, 'keep') }}>Keep</button>
           <button style={popoverBtnStyle} onClick={() => { void handleTrustAction(popover.linkId, 'dismiss') }}>Dismiss</button>
-          <button style={{ ...popoverBtnStyle, color: '#c0392b' }} onClick={() => { void handleTrustAction(popover.linkId, 'remove') }}>Remove</button>
+          <button style={{ ...popoverBtnStyle, color: 'var(--red)' }} onClick={() => { void handleTrustAction(popover.linkId, 'remove') }}>Remove</button>
         </div>
       )}
     </>
@@ -307,13 +308,14 @@ function LinkOverlay() {
 
 const popoverBtnStyle: React.CSSProperties = {
   background: 'none',
-  border: '1px solid #e0e0e0',
-  borderRadius: 4,
+  border: '1px solid var(--border-1)',
+  borderRadius: 'var(--radius-1)',
   padding: '4px 8px',
   cursor: 'pointer',
   textAlign: 'left',
-  fontFamily: 'inherit',
-  fontSize: 12,
+  fontFamily: 'var(--font-ui)',
+  fontSize: 'var(--text-xs)',
+  color: 'var(--text-1)',
 }
 
 // ── MinimalToolbar (PEO-120) ─────────────────────────────────────────────────
@@ -488,85 +490,29 @@ function MinimalToolbar() {
           style={{ display: 'none' }}
           onChange={e => { void handleImport(e) }}
         />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            height: 32,
-            padding: '0 10px',
-            border: '1px solid #e0e0e0',
-            borderRadius: 6,
-            background: '#fff',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <Button onClick={() => fileInputRef.current?.click()} size="sm">
           Import chats
-        </button>
-        <button
-          onClick={() => { void handleGroupClusters() }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            height: 32,
-            padding: '0 10px',
-            border: '1px solid #e0e0e0',
-            borderRadius: 6,
-            background: '#fff',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        </Button>
+        <Button onClick={() => { void handleGroupClusters() }} size="sm">
           Group clusters
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={handleInkToggle}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            height: 32,
-            padding: '0 10px',
-            border: `1px solid ${inkActive ? '#1a1a1a' : '#e0e0e0'}`,
-            borderRadius: 6,
-            background: inkActive ? '#1a1a1a' : '#fff',
-            color: inkActive ? '#fff' : '#1a1a1a',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
+          variant={inkActive ? 'primary' : 'secondary'}
+          size="sm"
+          icon="pen-line"
         >
           Ink
-        </button>
+        </Button>
         {inkActive && (
-          <button
+          <Button
             onClick={() => setEraserActive(!eraserActive)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              height: 32,
-              padding: '0 10px',
-              border: `1px solid ${eraserActive ? '#c0392b' : '#e0e0e0'}`,
-              borderRadius: 6,
-              background: eraserActive ? '#c0392b' : '#fff',
-              color: eraserActive ? '#fff' : '#1a1a1a',
-              fontSize: 12,
-              fontFamily: 'system-ui, sans-serif',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
+            variant={eraserActive ? 'danger' : 'secondary'}
+            size="sm"
+            icon="eraser"
           >
             Eraser
-          </button>
+          </Button>
         )}
       </DefaultToolbar>
       {toast && (
@@ -576,12 +522,14 @@ function MinimalToolbar() {
             bottom: 20,
             left: '50%',
             transform: 'translateX(-50%)',
-            background: '#1a1a1a',
-            color: '#fff',
+            background: 'var(--bg-overlay)',
+            color: 'var(--text-1)',
+            border: '1px solid var(--border-1)',
             padding: '8px 16px',
-            borderRadius: 6,
-            fontSize: 13,
-            fontFamily: 'system-ui, sans-serif',
+            borderRadius: 'var(--radius-3)',
+            boxShadow: 'var(--shadow-menu)',
+            fontSize: 'var(--text-sm)',
+            fontFamily: 'var(--font-ui)',
             pointerEvents: 'none',
             zIndex: 10000,
           }}
