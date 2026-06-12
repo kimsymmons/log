@@ -19,6 +19,9 @@ import {
   type AnyArtifactShape,
 } from './shapes/ArtifactShapes'
 import { MusingShapeUtil, DEFAULT_MUSING_SIZE, type MusingShape } from './shapes/MusingShape'
+import { SkillShapeUtil, DEFAULT_SKILL_SIZE, type SkillShape } from './shapes/SkillShape'
+import { McpServerShapeUtil, DEFAULT_MCP_SIZE, type McpServerShape } from './shapes/McpServerShape'
+import { GemShapeUtil, DEFAULT_GEM_SIZE, type GemShape } from './shapes/GemShape'
 import { parseConversations, conversationToCardSeed } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
@@ -34,6 +37,9 @@ const shapeUtils = [
   CodeArtifactShapeUtil,
   ImageArtifactShapeUtil,
   MusingShapeUtil,
+  SkillShapeUtil,
+  McpServerShapeUtil,
+  GemShapeUtil,
 ]
 
 const SAVE_DEBOUNCE_MS = 500
@@ -604,6 +610,63 @@ function GlobalKeyboardShortcuts() {
               text: '',
               tags: [],
               createdAt: Date.now(),
+              linkedTo: [],
+            },
+          })
+          break
+        }
+        case 's':
+        case 'S': {
+          const vp = editor.getViewportPageBounds()
+          editor.createShape<SkillShape>({
+            type: 'skill',
+            x: vp.midX - DEFAULT_SKILL_SIZE.w / 2,
+            y: vp.midY - DEFAULT_SKILL_SIZE.h / 2,
+            props: {
+              w: DEFAULT_SKILL_SIZE.w,
+              h: DEFAULT_SKILL_SIZE.h,
+              name: '',
+              description: '',
+              invocationKey: '',
+              tags: [],
+            },
+          })
+          break
+        }
+        case 'c':
+        case 'C': {
+          const vp = editor.getViewportPageBounds()
+          editor.createShape<McpServerShape>({
+            type: 'mcp-server',
+            x: vp.midX - DEFAULT_MCP_SIZE.w / 2,
+            y: vp.midY - DEFAULT_MCP_SIZE.h / 2,
+            props: {
+              w: DEFAULT_MCP_SIZE.w,
+              h: DEFAULT_MCP_SIZE.h,
+              name: '',
+              description: '',
+              endpoint: '',
+              status: 'disconnected',
+              tools: [],
+              tags: [],
+            },
+          })
+          break
+        }
+        case 'g':
+        case 'G': {
+          const vp = editor.getViewportPageBounds()
+          editor.createShape<GemShape>({
+            type: 'gem',
+            x: vp.midX - DEFAULT_GEM_SIZE.w / 2,
+            y: vp.midY - DEFAULT_GEM_SIZE.h / 2,
+            props: {
+              w: DEFAULT_GEM_SIZE.w,
+              h: DEFAULT_GEM_SIZE.h,
+              name: '',
+              description: '',
+              systemPrompt: '',
+              tags: [],
               linkedTo: [],
             },
           })
