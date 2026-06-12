@@ -55,6 +55,21 @@ export type AnthropicLike = {
   }
 }
 
+const AUTH_RATE_WINDOW_MS = 60_000
+const AUTH_RATE_LIMIT = 5
+
+// Per-email request timestamps within the sliding window
+const authRateMap = new Map<string, number[]>()
+
+function isRateLimited(email: string): boolean {
+  const now = Date.now()
+  const timestamps = (authRateMap.get(email) ?? []).filter(t => now - t < AUTH_RATE_WINDOW_MS)
+  if (timestamps.length >= AUTH_RATE_LIMIT) return true
+  timestamps.push(now)
+  authRateMap.set(email, timestamps)
+  return false
+}
+
 export function createApp(db: Database.Database, anthropicOverride?: AnthropicLike) {
   const app = express()
   app.use(express.json())
@@ -67,6 +82,11 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     const { email } = req.body as { email?: string }
     if (!email || typeof email !== 'string') {
       res.status(400).json({ error: 'email is required' })
+      return
+    }
+
+    if (isRateLimited(email)) {
+      res.status(429).json({ error: 'Too many requests' })
       return
     }
 
