@@ -1,3 +1,4 @@
+import cors from 'cors'
 import express, { Request, Response, NextFunction } from 'express'
 import Database from 'better-sqlite3'
 import { ulid } from 'ulid'
@@ -70,8 +71,22 @@ function isRateLimited(email: string): boolean {
   return false
 }
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:5173', 'http://localhost:5174']
+
 export function createApp(db: Database.Database, anthropicOverride?: AnthropicLike) {
   const app = express()
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true)
+      if (allowedOrigins.some(o => origin === o || origin.endsWith('.vercel.app'))) {
+        return callback(null, true)
+      }
+      callback(new Error('Not allowed by CORS'))
+    },
+    credentials: true,
+  }))
   app.use(express.json())
 
   // Ink strokes (PEO-126) — no auth required (local-first)
