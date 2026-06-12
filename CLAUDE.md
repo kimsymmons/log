@@ -19,6 +19,18 @@ tldraw v3 canvas + Express/SQLite backend. Tests: `npm test` (Vitest; jsdom for 
 - `ArtifactType` = `'chat' | 'project' | 'note' | 'sketch'` — DB domain type (`artifacts` table rows)
 - `ArtifactShapeType` = `'markdown' | 'code' | 'image'` — canvas shape discriminator (SSE payloads)
 
+## Testing
+
+Two-layer approach: Vitest for units/integration, Playwright for E2E.
+
+**Vitest** (`npm test`): fast, runs in-process. Use for pure functions, state machines, server route handlers (inject `createApp(db, mockAnthropic)`), React component logic. jsdom env for `src/`, node env for `server/`.
+
+**Playwright** (`npx playwright test`): full browser. **Required for any ticket that touches canvas rendering, pointer events, tldraw internals, ink layer, or auth flows.** Specs live in `e2e/`. Mock all backend calls with `page.route()` — specs must not need a live server. The `webServer` block in `playwright.config.ts` starts `npm run dev` automatically.
+
+**TDD workflow for new features**: write Vitest tests for pure logic first, Playwright spec for the user-visible behaviour, then implement.
+
+**Do not `vi.mock('@anthropic-ai/sdk')`** — async generators break in Vitest node env. Use `createApp(db, anthropicOverride)` injection instead.
+
 ## Server conventions
 
 - `createApp(db, anthropicOverride?)` — tests inject a mock Anthropic client; never `vi.mock('@anthropic-ai/sdk')` (async generators break in Vitest node env).
