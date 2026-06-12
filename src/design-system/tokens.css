@@ -1,0 +1,136 @@
+/* Log design system — dark only, no light theme */
+
+:root {
+  /* Fonts */
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Fira Mono', monospace;
+
+  /* Backgrounds */
+  --bg-app: #090A0C;
+  --bg-canvas: #0B0C0E;
+  --bg-sidebar: #131416;
+  --bg-surface: #17181C;
+  --bg-raised: #1D1F24;
+  --bg-overlay: #232529;
+  --surface-card: var(--bg-surface);
+  --surface-menu: var(--bg-raised);
+  --surface-dialog: var(--bg-overlay);
+
+  /* Text */
+  --text-1: #F7F8F8;
+  --text-2: #A9AEB8;
+  --text-3: #7E838C;
+  --text-4: #565A63;
+  --text-on-accent: #FFFFFF;
+
+  /* Borders */
+  --border-1: rgba(255, 255, 255, 0.08);
+  --border-2: rgba(255, 255, 255, 0.14);
+  --border-3: rgba(255, 255, 255, 0.22);
+
+  /* Accent */
+  --accent: #5E6AD2;
+  --accent-hover: #6B76DC;
+  --accent-active: #515CC0;
+  --accent-text: #8B95F2;
+  --accent-muted: rgba(94, 106, 210, 0.16);
+  --accent-border: rgba(94, 106, 210, 0.55);
+
+  /* Selection */
+  --selection-stroke: var(--accent);
+  --selection-fill: rgba(94, 106, 210, 0.10);
+  --selection-handle: #FFFFFF;
+
+  /* Status */
+  --green: #4CB782;   --green-muted: rgba(76, 183, 130, 0.14);
+  --yellow: #F2C94C;  --yellow-muted: rgba(242, 201, 76, 0.14);
+  --orange: #FC7840;  --orange-muted: rgba(252, 120, 64, 0.14);
+  --red: #EB5757;     --red-muted: rgba(235, 87, 87, 0.14);
+  --blue: #4EA7FC;    --blue-muted: rgba(78, 167, 252, 0.14);
+
+  /* Canvas dot grid */
+  --canvas-dot: rgba(255, 255, 255, 0.07);
+  --canvas-dot-size: 1.5px;
+  --canvas-dot-gap: 24px;
+
+  /* Sticky note tints */
+  --sticky-yellow-bg: #262214; --sticky-yellow-border: rgba(242, 201, 76, 0.35); --sticky-yellow-text: #F2D269;
+  --sticky-green-bg: #16241D;  --sticky-green-border: rgba(76, 183, 130, 0.35);  --sticky-green-text: #7CD8A8;
+  --sticky-blue-bg: #14202C;   --sticky-blue-border: rgba(78, 167, 252, 0.35);   --sticky-blue-text: #82C0FF;
+  --sticky-purple-bg: #1D1A2E; --sticky-purple-border: rgba(148, 134, 255, 0.40); --sticky-purple-text: #B0A4FF;
+  --sticky-pink-bg: #281A22;   --sticky-pink-border: rgba(240, 123, 176, 0.35);  --sticky-pink-text: #F49AC4;
+  --sticky-gray-bg: #1B1D21;   --sticky-gray-border: rgba(255, 255, 255, 0.14);  --sticky-gray-text: #C2C6CD;
+  --sticky-yellow-solid: #D9A514;
+  --sticky-green-solid: #2E9E68;
+  --sticky-blue-solid: #2B7FD4;
+  --sticky-purple-solid: #6E5BE0;
+  --sticky-pink-solid: #D4538C;
+  --sticky-gray-solid: #5C636E;
+
+  /* Type identity */
+  --type-project: var(--accent-text);
+  --type-idea: var(--sticky-yellow-text);
+  --type-thread: var(--sticky-green-text);
+  --type-doc: var(--sticky-blue-text);
+  --type-sketch: #FFA475;
+
+  --purple: #B59AFF;
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  /* Type scale */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 21px;
+  --text-2xl: 26px;
+  --text-3xl: 32px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.6;
+  --track-normal: -0.01em;
+  --track-wide: 0.04em;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --control-h-sm: 28px;
+  --control-h-md: 32px;
+  --control-h-lg: 40px;
+  --hit-target: 44px;
+
+  /* Radii */
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+  --radius-4: 10px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-menu: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-floating: 0 8px 24px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.60);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-inset: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-disc: 0 4px 12px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(24, 26, 30, 0.78);
+  --glass-blur: 16px;
+
+  /* Motion */
+  --duration-fast: 100ms;
+  --duration: 150ms;
+  --duration-slow: 250ms;
+  --ease-mech: cubic-bezier(0.2, 0, 0, 1);
+}
