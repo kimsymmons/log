@@ -8,6 +8,7 @@ import { signToken, verifyToken } from './jwt'
 import { estimateCost } from './cost'
 import { findLinks, LINKING_MODEL } from './linking'
 import { suggestClusters } from './clustering'
+import { inkRouter } from './ink'
 
 interface AuthToken {
   id: string
@@ -57,6 +58,9 @@ export type AnthropicLike = {
 export function createApp(db: Database.Database, anthropicOverride?: AnthropicLike) {
   const app = express()
   app.use(express.json())
+
+  // Ink strokes (PEO-126) — no auth required (local-first)
+  app.use('/ink', inkRouter(db))
 
   // POST /auth/request
   app.post('/auth/request', async (req: Request, res: Response) => {

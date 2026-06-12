@@ -22,6 +22,7 @@ import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
 import type { LogNode } from './model/nodes'
 import { linkDisplayProps } from './canvas/linkDisplay'
+import { InkLayer, useInkStrokes } from './ink/InkLayer'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -325,6 +326,13 @@ function MinimalToolbar() {
   const editor = useEditor()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const { inkActive, eraserActive, setInkActive, setEraserActive } = React.useContext(InkContext)
+
+  const handleInkToggle = useCallback(() => {
+    const next = !inkActive
+    setInkActive(next)
+    editor.setCurrentTool(next ? 'select' : 'select')
+  }, [inkActive, setInkActive, editor])
 
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -505,6 +513,48 @@ function MinimalToolbar() {
         >
           Group clusters
         </button>
+        <button
+          onClick={handleInkToggle}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            height: 32,
+            padding: '0 10px',
+            border: `1px solid ${inkActive ? '#1a1a1a' : '#e0e0e0'}`,
+            borderRadius: 6,
+            background: inkActive ? '#1a1a1a' : '#fff',
+            color: inkActive ? '#fff' : '#1a1a1a',
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Ink
+        </button>
+        {inkActive && (
+          <button
+            onClick={() => setEraserActive(!eraserActive)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              height: 32,
+              padding: '0 10px',
+              border: `1px solid ${eraserActive ? '#c0392b' : '#e0e0e0'}`,
+              borderRadius: 6,
+              background: eraserActive ? '#c0392b' : '#fff',
+              color: eraserActive ? '#fff' : '#1a1a1a',
+              fontSize: 12,
+              fontFamily: 'system-ui, sans-serif',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Eraser
+          </button>
+        )}
       </DefaultToolbar>
       {toast && (
         <div
@@ -530,33 +580,73 @@ function MinimalToolbar() {
   )
 }
 
+// ── Ink context ───────────────────────────────────────────────────────────────
+
+import type { Stroke } from './ink/InkLayer'
+
+interface InkCtx {
+  inkActive: boolean
+  eraserActive: boolean
+  strokes: Stroke[]
+  setInkActive: (v: boolean) => void
+  setEraserActive: (v: boolean) => void
+  setStrokes: (v: Stroke[]) => void
+}
+
+const InkContext = React.createContext<InkCtx>({
+  inkActive: false,
+  eraserActive: false,
+  strokes: [],
+  setInkActive: () => {},
+  setEraserActive: () => {},
+  setStrokes: () => {},
+})
+
 // ── App ──────────────────────────────────────────────────────────────────────
 
 function CanvasOverlays() {
+  const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
   return (
     <>
       <TetherOverlay />
       <LinkOverlay />
+      <InkLayer
+        active={inkActive}
+        eraserActive={eraserActive}
+        strokes={strokes}
+        onStrokesChange={setStrokes}
+      />
     </>
   )
 }
 
-const components = {
-  InFrontOfTheCanvas: CanvasOverlays,
-  Toolbar: MinimalToolbar,
-}
-
 export default function App() {
+  const [inkActive, setInkActiveRaw] = useState(false)
+  const [eraserActive, setEraserActive] = useState(false)
+  const { strokes, setStrokes } = useInkStrokes()
+
+  const setInkActive = useCallback((v: boolean) => {
+    setInkActiveRaw(v)
+    if (!v) setEraserActive(false)
+  }, [])
+
+  const components = React.useMemo(() => ({
+    InFrontOfTheCanvas: CanvasOverlays,
+    Toolbar: MinimalToolbar,
+  }), [])
+
   return (
-    <div style={{ position: 'fixed', inset: 0 }}>
-      <Tldraw
-        shapeUtils={shapeUtils}
-        onMount={(editor) => {
-          window.__tldrawEditor = editor
-          return setupPersistence(editor)
-        }}
-        components={components}
-      />
-    </div>
+    <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
+      <div style={{ position: 'fixed', inset: 0 }}>
+        <Tldraw
+          shapeUtils={shapeUtils}
+          onMount={(editor) => {
+            window.__tldrawEditor = editor
+            return setupPersistence(editor)
+          }}
+          components={components}
+        />
+      </div>
+    </InkContext.Provider>
   )
 }
