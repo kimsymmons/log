@@ -22,6 +22,7 @@ import { MusingShapeUtil, DEFAULT_MUSING_SIZE, type MusingShape } from './shapes
 import { SkillShapeUtil, DEFAULT_SKILL_SIZE, type SkillShape } from './shapes/SkillShape'
 import { McpServerShapeUtil, DEFAULT_MCP_SIZE, type McpServerShape } from './shapes/McpServerShape'
 import { GemShapeUtil, DEFAULT_GEM_SIZE, type GemShape } from './shapes/GemShape'
+import { AgentCardShapeUtil, DEFAULT_AGENT_CARD_SIZE, type AgentCardShape } from './shapes/AgentCardShape'
 import { parseConversations, conversationToCardSeed } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
@@ -40,6 +41,7 @@ const shapeUtils = [
   SkillShapeUtil,
   McpServerShapeUtil,
   GemShapeUtil,
+  AgentCardShapeUtil,
 ]
 
 const SAVE_DEBOUNCE_MS = 500
@@ -668,6 +670,26 @@ function GlobalKeyboardShortcuts() {
               systemPrompt: '',
               tags: [],
               linkedTo: [],
+            },
+          })
+          break
+        }
+        case 'a':
+        case 'A': {
+          const vp = editor.getViewportPageBounds()
+          editor.createShape<AgentCardShape>({
+            type: 'agent-card',
+            x: vp.midX - DEFAULT_AGENT_CARD_SIZE.w / 2,
+            y: vp.midY - DEFAULT_AGENT_CARD_SIZE.h / 2,
+            props: {
+              w: DEFAULT_AGENT_CARD_SIZE.w,
+              h: DEFAULT_AGENT_CARD_SIZE.h,
+              agentName: '',
+              model: 'claude-sonnet-4-6',
+              status: 'running',
+              taskDescription: '',
+              tags: [],
+              startedAt: Date.now(),
             },
           })
           break
