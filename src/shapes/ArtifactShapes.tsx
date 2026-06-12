@@ -10,6 +10,7 @@ export type ArtifactProps = {
   chatId: string
   content: string
   title: string
+  tags?: string[]
 }
 
 export type MarkdownArtifactShape = TLBaseShape<'markdown-artifact', ArtifactProps>
@@ -63,10 +64,11 @@ const ARTIFACT_PROPS = {
   chatId: T.string,
   content: T.string,
   title: T.string,
+  tags: T.optional(T.arrayOf(T.string)),
 }
 
 function defaultArtifactProps(): ArtifactProps {
-  return { w: ARTIFACT_COLLAPSED_SIZE.w, h: ARTIFACT_COLLAPSED_SIZE.h, chatId: '', content: '', title: '' }
+  return { w: ARTIFACT_COLLAPSED_SIZE.w, h: ARTIFACT_COLLAPSED_SIZE.h, chatId: '', content: '', title: '', tags: [] }
 }
 
 // ── Artifact type icons ──────────────────────────────────────────────────────
