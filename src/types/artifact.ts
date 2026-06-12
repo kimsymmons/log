@@ -42,7 +42,7 @@ export interface MemoryEntry {
   artifact_id: string
   embedding_model: string | null
   content: string | null
-  embedding: Buffer | null
+  embedding: Uint8Array | null
   created_at: number
 }
 
