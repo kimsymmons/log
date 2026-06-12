@@ -2,5 +2,16 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.tldraw.com; font-src 'self' data: https://cdn.tldraw.com; connect-src 'self' https://log-kimsymmons.fly.dev wss://log-kimsymmons.fly.dev; worker-src 'self' blob:; frame-src 'none';"
+        }
+      ]
+    }
+  ]
 }
