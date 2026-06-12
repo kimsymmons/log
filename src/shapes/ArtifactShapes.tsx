@@ -170,6 +170,7 @@ function ArtifactViewer({ shape }: { shape: AnyArtifactShape }) {
 
   if (shape.type === 'image-artifact') {
     return (
+      // TODO: sanitize content before using as img src — javascript: URLs are not filtered
       <img
         src={content}
         alt={shape.props.title}
