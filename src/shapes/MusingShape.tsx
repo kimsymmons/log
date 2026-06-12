@@ -5,6 +5,7 @@ import {
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,8 @@ export function MusingInner({ shape }: { shape: MusingShape }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(text)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const detail = useDetailLevel()
+  const d = detailDisplay(detail)
 
   // Keep draft in sync if shape props change externally
   useEffect(() => {
@@ -62,9 +65,11 @@ export function MusingInner({ shape }: { shape: MusingShape }) {
 
   return (
     <div
+      data-detail={detail}
       style={{
         width: shape.props.w,
-        height: shape.props.h,
+        height: d.minimal ? 'auto' : shape.props.h,
+        minHeight: d.minimal ? 40 : undefined,
         background: 'rgba(254, 249, 240, 0.92)',
         border: '1px solid #d6c9b0',
         borderRadius: 12,
@@ -116,7 +121,12 @@ export function MusingInner({ shape }: { shape: MusingShape }) {
               color: text ? '#4a3f2f' : '#b5a48a',
               lineHeight: 1.5,
               cursor: 'text',
-              whiteSpace: 'pre-wrap',
+              // The musing text doubles as its title (a musing has no separate
+              // glyph/title), so it stays visible at every detail level — but
+              // collapses to a single ellipsised line when minimal.
+              whiteSpace: d.minimal ? 'nowrap' : 'pre-wrap',
+              overflow: d.minimal ? 'hidden' : undefined,
+              textOverflow: d.minimal ? 'ellipsis' : undefined,
               wordBreak: 'break-word',
             }}
           >
@@ -125,8 +135,8 @@ export function MusingInner({ shape }: { shape: MusingShape }) {
         )}
       </div>
 
-      {/* footer: tags + timestamp */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+      {/* footer: tags + timestamp (secondary) */}
+      <div style={{ display: d.secondary ?? 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {tags.map(tag => (
             <span
