@@ -17,6 +17,7 @@ import {
   ARTIFACT_COLLAPSED_SIZE,
   type AnyArtifactShape,
 } from './shapes/ArtifactShapes'
+import { MusingShapeUtil, DEFAULT_MUSING_SIZE, type MusingShape } from './shapes/MusingShape'
 import { parseConversations, conversationToCardSeed } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
@@ -24,12 +25,14 @@ import type { LogNode } from './model/nodes'
 import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
+import { useClusteringLayout } from './hooks/useClusteringLayout'
 
 const shapeUtils = [
   ChatCardShapeUtil,
   MarkdownArtifactShapeUtil,
   CodeArtifactShapeUtil,
   ImageArtifactShapeUtil,
+  MusingShapeUtil,
 ]
 
 const SAVE_DEBOUNCE_MS = 500
@@ -640,6 +643,24 @@ function GlobalKeyboardShortcuts() {
         case '-':
           editor.zoomOut()
           break
+        case 'm':
+        case 'M': {
+          const vp = editor.getViewportPageBounds()
+          editor.createShape<MusingShape>({
+            type: 'musing',
+            x: vp.midX - DEFAULT_MUSING_SIZE.w / 2,
+            y: vp.midY - DEFAULT_MUSING_SIZE.h / 2,
+            props: {
+              w: DEFAULT_MUSING_SIZE.w,
+              h: DEFAULT_MUSING_SIZE.h,
+              text: '',
+              tags: [],
+              createdAt: Date.now(),
+              linkedTo: [],
+            },
+          })
+          break
+        }
       }
     }
 
@@ -653,7 +674,9 @@ function GlobalKeyboardShortcuts() {
 // ── App ──────────────────────────────────────────────────────────────────────
 
 function CanvasOverlays() {
+  const editor = useEditor()
   const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
+  useClusteringLayout(editor)
   return (
     <>
       <TetherOverlay />
