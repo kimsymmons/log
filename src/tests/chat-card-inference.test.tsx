@@ -1,9 +1,11 @@
 /**
  * PEO-118: Anthropic SSE integration — frontend unit tests.
- * Tests parseSseData (pure) and a stubbed fetch integration.
+ * Tests parseSseData (pure) and a component-level streaming integration test.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseSseData } from '../shapes/ChatCard'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { parseSseData, ChatCardInner } from '../shapes/ChatCard'
+import type { ChatCardShape } from '../shapes/ChatCard'
 
 // ── parseSseData unit tests ────────────────────────────────────────────────
 
@@ -49,92 +51,78 @@ describe('parseSseData', () => {
   })
 })
 
-// ── Stubbed fetch / SSE stream integration ─────────────────────────────────
+// ── ChatCardInner streaming integration ────────────────────────────────────
 
-function makeSseResponse(lines: string[]): Response {
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const line of lines) controller.enqueue(encoder.encode(line))
-      controller.close()
-    },
-  })
-  return new Response(stream, {
-    status: 200,
-    headers: { 'Content-Type': 'text/event-stream' },
-  })
+function makeShape(): ChatCardShape {
+  return {
+    id: 'shape:test-chat' as ChatCardShape['id'],
+    type: 'chat-card',
+    x: 0, y: 0, rotation: 0,
+    index: 'a1' as ChatCardShape['index'],
+    parentId: 'page:test' as ChatCardShape['parentId'],
+    isLocked: false, opacity: 1, meta: {},
+    props: { w: 240, h: 120, title: 'Test Chat', messages: [], summary: '', createdAt: Date.now() },
+    typeName: 'shape',
+  } as unknown as ChatCardShape
 }
 
-async function collectSseEvents(response: Response) {
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let raw = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    raw += decoder.decode(value, { stream: true })
-  }
-  return raw
-    .split('\n')
-    .filter(l => l.startsWith('data: '))
-    .map(l => parseSseData(l.slice(6)))
-    .filter((x): x is NonNullable<typeof x> => x !== null)
-}
+describe('ChatCardInner — streaming integration', () => {
+  beforeEach(() => {
+    // jsdom's localStorage may be non-functional when --localstorage-file has no valid path.
+    vi.stubGlobal('localStorage', { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() })
+  })
 
-describe('fetch stub — SSE stream round-trip', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('parses all event types from a stubbed SSE fetch', async () => {
+  it('displays accumulated delta text while streaming', async () => {
+    // Hold back [DONE] so we can assert the streaming state before it ends.
+    let resolveStream!: () => void
+    const streamReady = new Promise<void>(r => { resolveStream = r })
+
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(encoder.encode('data: {"delta":"Hello"}\n\n'))
+        controller.enqueue(encoder.encode('data: {"delta":" world"}\n\n'))
+        await streamReady
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      makeSseResponse([
-        'data: {"delta":"Hello"}\n\n',
-        'data: {"delta":" world"}\n\n',
-        'data: {"summary":{"title":"Test Chat","body":"A summary."}}\n\n',
-        'data: [DONE]\n\n',
-      ])
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
     ))
 
-    const res = await fetch('/inference', { method: 'POST', body: '{}' })
-    const events = await collectSseEvents(res)
+    render(<ChatCardInner shape={makeShape()} />)
 
-    expect(events).toContainEqual({ type: 'delta', text: 'Hello' })
-    expect(events).toContainEqual({ type: 'delta', text: ' world' })
-    expect(events).toContainEqual({ type: 'summary', title: 'Test Chat', body: 'A summary.' })
-    expect(events).toContainEqual({ type: 'done' })
+    // Expand the collapsed card, then type and send.
+    fireEvent.click(screen.getByText('Test Chat'))
+    fireEvent.change(screen.getByPlaceholderText('Send a message…'), { target: { value: 'Hi' } })
+    fireEvent.click(screen.getByText('Send'))
+
+    // Delta text must appear in the DOM while streaming is in progress.
+    await waitFor(() => {
+      expect(screen.getByText(/Hello/)).toBeInTheDocument()
+    })
+
+    resolveStream()
   })
 
-  it('surfaces an error event from the stream', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      makeSseResponse([
-        'data: {"error":"Model overloaded"}\n\n',
-        'data: [DONE]\n\n',
-      ])
-    ))
+  it('shows error message on fetch failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
 
-    const res = await fetch('/inference', { method: 'POST', body: '{}' })
-    const events = await collectSseEvents(res)
+    render(<ChatCardInner shape={makeShape()} />)
 
-    expect(events).toContainEqual({ type: 'error', message: 'Model overloaded' })
-    expect(events).toContainEqual({ type: 'done' })
-  })
+    fireEvent.click(screen.getByText('Test Chat'))
+    fireEvent.change(screen.getByPlaceholderText('Send a message…'), { target: { value: 'Hi' } })
+    fireEvent.click(screen.getByText('Send'))
 
-  it('summary event precedes done in the stream', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      makeSseResponse([
-        'data: {"delta":"token"}\n\n',
-        'data: {"summary":{"title":"T","body":"B"}}\n\n',
-        'data: [DONE]\n\n',
-      ])
-    ))
-
-    const res = await fetch('/inference', { method: 'POST', body: '{}' })
-    const events = await collectSseEvents(res)
-
-    const summaryIdx = events.findIndex(e => e.type === 'summary')
-    const doneIdx = events.findIndex(e => e.type === 'done')
-    expect(summaryIdx).toBeGreaterThanOrEqual(0)
-    expect(summaryIdx).toBeLessThan(doneIdx)
+    // On error the component collapses (no messages) and shows the error inline.
+    await waitFor(() => {
+      expect(screen.getByText(/Error: Network error/)).toBeInTheDocument()
+    })
   })
 })

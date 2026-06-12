@@ -116,7 +116,7 @@ function relativeTime(ts: number): string {
 
 // ── Inner component ────────────────────────────────────────────────────────
 
-function ChatCardInner({ shape }: { shape: ChatCardShape }) {
+export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
   const [uiState, setUiState] = useState<ChatCardState>('collapsed')
   const [inputValue, setInputValue] = useState('')
   const [streamedContent, setStreamedContent] = useState('')
@@ -217,7 +217,9 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
       dispatch('streamingDone')
     } catch (err) {
       setErrorMessage((err as Error).message ?? 'Request failed')
-      dispatch('collapse')
+      // 'streaming + collapse' is a no-op in the state machine, so exit streaming first.
+      dispatch('streamingDone')
+      if (messages.length === 0) dispatch('collapse')
     }
   }, [inputValue, messages, shape.id, dispatch])
 
