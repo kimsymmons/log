@@ -49,6 +49,41 @@ test('the connection is dim by default and highlights on hover', async ({ page }
   await expect(group).toHaveAttribute('data-highlighted', 'true')
 })
 
+test('the line tracks the camera on pan and zoom (no drift)', async ({ page }) => {
+  await seedTaggedPair(page)
+  const line = page.locator('[data-testid="connection-lines"] line')
+  await expect(line).toHaveCount(1)
+
+  const read = async () => {
+    const [x1, x2] = await Promise.all([
+      line.getAttribute('x1'),
+      line.getAttribute('x2'),
+    ])
+    return { x1: Number(x1), x2: Number(x2), len: Math.abs(Number(x2) - Number(x1)) }
+  }
+
+  const before = await read()
+
+  // Pan the camera right: both endpoints must shift left by the same screen delta.
+  await page.evaluate(() => {
+    const editor = (window as unknown as { __tldrawEditor: any }).__tldrawEditor
+    const cam = editor.getCamera()
+    editor.setCamera({ x: cam.x - 200, y: cam.y, z: cam.z }, { immediate: true })
+  })
+  const panned = await read()
+  expect(Math.round(panned.x1 - before.x1)).toBe(Math.round(panned.x2 - before.x2))
+  expect(panned.x1).not.toBe(before.x1)
+
+  // Zoom in: the on-screen distance between the two endpoints must grow.
+  await page.evaluate(() => {
+    const editor = (window as unknown as { __tldrawEditor: any }).__tldrawEditor
+    const cam = editor.getCamera()
+    editor.setCamera({ x: cam.x, y: cam.y, z: cam.z * 2 }, { immediate: true })
+  })
+  const zoomed = await read()
+  expect(zoomed.len).toBeGreaterThan(panned.len * 1.5)
+})
+
 test('no line is drawn when nodes do not share a tag', async ({ page }) => {
   await page.evaluate(() => {
     const editor = (window as unknown as { __tldrawEditor: any }).__tldrawEditor

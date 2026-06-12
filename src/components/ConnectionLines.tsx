@@ -50,6 +50,15 @@ export interface Connection {
   color: string
 }
 
+/**
+ * Above this many tagged nodes we draw nothing. Connections are an all-pairs
+ * (O(n²)) computation that re-runs inside `useValue` on every camera frame, so
+ * on a busy canvas it would both jank the pan/zoom interaction and bury the
+ * canvas under a hairball of lines. Past this threshold the overlay is more
+ * noise than signal, so we bail rather than degrade the whole canvas.
+ */
+export const MAX_TAGGED_NODES = 50
+
 /** Tags present on both nodes, preserving `a`'s ordering. */
 export function sharedTags(a: TaggedNode, b: TaggedNode): string[] {
   const bSet = new Set(b.tags)
@@ -58,10 +67,12 @@ export function sharedTags(a: TaggedNode, b: TaggedNode): string[] {
 
 /**
  * Every unique pair of nodes that shares at least one tag. The first shared tag
- * (in the lower-id node's order) determines the highlight colour.
+ * (in the lower-id node's order) determines the highlight colour. Returns no
+ * connections once the tagged-node count exceeds {@link MAX_TAGGED_NODES}.
  */
 export function computeConnections(nodes: TaggedNode[]): Connection[] {
   const tagged = nodes.filter((n) => n.tags.length > 0)
+  if (tagged.length > MAX_TAGGED_NODES) return []
   const out: Connection[] = []
   for (let i = 0; i < tagged.length; i++) {
     for (let j = i + 1; j < tagged.length; j++) {

@@ -5,6 +5,7 @@ import {
   isHighlighted,
   tagColor,
   TAG_PALETTE,
+  MAX_TAGGED_NODES,
   type TaggedNode,
 } from './ConnectionLines'
 
@@ -54,6 +55,25 @@ describe('computeConnections', () => {
   it('uses the first shared tag to pick the highlight colour', () => {
     const conns = computeConnections([node('a', ['alpha', 'beta']), node('b', ['beta', 'alpha'])])
     expect(conns[0].color).toBe(tagColor('alpha'))
+  })
+
+  it('connects all pairs right up to the node cap', () => {
+    // Every node shares the same tag, so the result is the full set of pairs.
+    const nodes = Array.from({ length: MAX_TAGGED_NODES }, (_, i) => node(`n${i}`, ['shared']))
+    const conns = computeConnections(nodes)
+    expect(conns).toHaveLength((MAX_TAGGED_NODES * (MAX_TAGGED_NODES - 1)) / 2)
+  })
+
+  it('draws nothing once tagged nodes exceed the cap (avoids N² jank)', () => {
+    const nodes = Array.from({ length: MAX_TAGGED_NODES + 1 }, (_, i) => node(`n${i}`, ['shared']))
+    expect(computeConnections(nodes)).toEqual([])
+  })
+
+  it('counts only tagged nodes toward the cap', () => {
+    // MAX_TAGGED_NODES tagged + a pile of untagged: still under the cap.
+    const tagged = Array.from({ length: MAX_TAGGED_NODES }, (_, i) => node(`t${i}`, ['shared']))
+    const untagged = Array.from({ length: 100 }, (_, i) => node(`u${i}`, []))
+    expect(computeConnections([...untagged, ...tagged]).length).toBeGreaterThan(0)
   })
 })
 
