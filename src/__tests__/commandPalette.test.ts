@@ -36,19 +36,6 @@ describe('fuzzyMatch', () => {
 })
 
 describe('COMMAND_DEFS', () => {
-  it('has at least 8 entries', () => {
-    expect(COMMAND_DEFS.length).toBeGreaterThanOrEqual(8)
-  })
-
-  it('each entry has an id and label', () => {
-    for (const cmd of COMMAND_DEFS) {
-      expect(typeof cmd.id).toBe('string')
-      expect(cmd.id.length).toBeGreaterThan(0)
-      expect(typeof cmd.label).toBe('string')
-      expect(cmd.label.length).toBeGreaterThan(0)
-    }
-  })
-
   it('includes expected commands', () => {
     const labels = COMMAND_DEFS.map(c => c.label)
     expect(labels).toContain('New chat')

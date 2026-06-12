@@ -79,6 +79,24 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     db.exec(`ALTER TABLE artifact_links ADD COLUMN rationale TEXT`)
   }
 
+  // Schema migrations table — tracks which migrations have run (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    )
+  `)
+
+  const hasMigration = (id: string): boolean =>
+    !!db.prepare('SELECT 1 FROM schema_migrations WHERE id = ?').get(id)
+
+  const markMigration = (id: string): void => {
+    db.prepare('INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)').run(id, Date.now())
+  }
+
+  // Create link_feedback if it doesn't exist yet (original path).
+  // link_feedback is an event log — link_id is stored as plain TEXT so audit
+  // rows survive link deletion (no FK so no cascade or null-out on delete).
   const feedbackCols = db.pragma('table_info(link_feedback)') as Array<{ name: string }>
   if (feedbackCols.length === 0) {
     db.exec(`
@@ -89,6 +107,26 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
         created_at INTEGER NOT NULL
       )
     `)
+    markMigration('link_feedback_fk_v1')
+  }
+
+  // Migration: remove FK from link_feedback.link_id so audit rows survive link deletion.
+  // SQLite cannot ALTER columns, so we recreate the table and copy rows.
+  if (!hasMigration('link_feedback_fk_v1')) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE link_feedback_new (
+        id TEXT PRIMARY KEY,
+        link_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO link_feedback_new SELECT id, link_id, action, created_at FROM link_feedback;
+      DROP TABLE link_feedback;
+      ALTER TABLE link_feedback_new RENAME TO link_feedback;
+      COMMIT;
+    `)
+    markMigration('link_feedback_fk_v1')
   }
 
   // Additive migration: clusters table (PEO-124)

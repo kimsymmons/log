@@ -333,7 +333,7 @@ function MinimalToolbar() {
   const handleInkToggle = useCallback(() => {
     const next = !inkActive
     setInkActive(next)
-    editor.setCurrentTool(next ? 'select' : 'select')
+    editor.setCurrentTool(next ? 'draw' : 'select')
   }, [inkActive, setInkActive, editor])
 
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {

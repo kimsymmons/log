@@ -120,6 +120,7 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
   const [uiState, setUiState] = useState<ChatCardState>('collapsed')
   const [inputValue, setInputValue] = useState('')
   const [streamedContent, setStreamedContent] = useState('')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const dispatch = useCallback((event: ChatCardEvent) => {
     setUiState(prev => chatCardTransition(prev, event))
@@ -215,14 +216,7 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
 
       dispatch('streamingDone')
     } catch (err) {
-      const editor = getEditor()
-      if (editor) {
-        editor.updateShape<ChatCardShape>({
-          id: shape.id,
-          type: 'chat-card',
-          props: { summary: `Error: ${(err as Error).message}` },
-        })
-      }
+      setErrorMessage((err as Error).message ?? 'Request failed')
       dispatch('collapse')
     }
   }, [inputValue, messages, shape.id, dispatch])
@@ -236,7 +230,7 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
           width: COLLAPSED_SIZE.w,
           height: COLLAPSED_SIZE.h,
           background: '#f7f7f7',
-          border: '1px solid #ccc',
+          border: errorMessage ? '1px solid #e74c3c' : '1px solid #ccc',
           borderRadius: 6,
           padding: '8px 10px',
           fontFamily: 'system-ui, sans-serif',
@@ -246,14 +240,20 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
           cursor: 'pointer',
           boxSizing: 'border-box',
         }}
-        onClick={() => dispatch('expand')}
+        onClick={() => { setErrorMessage(null); dispatch('expand') }}
       >
         <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {title}
         </div>
-        <div style={{ fontSize: 11, color: '#555', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-          {summary || 'No summary yet.'}
-        </div>
+        {errorMessage ? (
+          <div style={{ fontSize: 11, color: '#e74c3c', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            Error: {errorMessage}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: '#555', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            {summary || 'No summary yet.'}
+          </div>
+        )}
         <div style={{ fontSize: 10, color: '#999' }}>
           {relativeTime(createdAt)}
         </div>

@@ -135,6 +135,17 @@ describe('POST /inference — SSE streaming', () => {
   })
 })
 
+describe('POST /inference — empty messages', () => {
+  it('returns 200 and streams without crashing when messages is empty', async () => {
+    const res = await request(app)
+      .post('/inference')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ artifactId: 'empty-msg-test', modelId: 'claude-sonnet-4-6', messages: [] })
+    expect(res.status).toBe(200)
+    expect(res.text).toContain('data: [DONE]')
+  })
+})
+
 describe('POST /inference — cost logging', () => {
   it('inserts a row into inference_log with artifact_id, model, tokens, cost', async () => {
     await request(app)
