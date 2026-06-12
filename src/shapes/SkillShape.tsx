@@ -1,10 +1,10 @@
 import React from 'react'
 import {
   BaseBoxShapeUtil,
-  HTMLContainer,
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { FilterDimContainer } from '../canvas/FilterContext'
 import { Tag } from '../design-system/Tag'
 import { KeyHint } from '../design-system/KeyHint'
 import { Icon } from '../design-system/Icon'
@@ -118,12 +118,9 @@ export class SkillShapeUtil extends BaseBoxShapeUtil<SkillShape> {
 
   component(shape: SkillShape) {
     return (
-      <HTMLContainer
-        data-shape-type="skill"
-        style={{ pointerEvents: 'all' }}
-      >
+      <FilterDimContainer shape={shape} dataShapeType="skill">
         <SkillInner shape={shape} />
-      </HTMLContainer>
+      </FilterDimContainer>
     )
   }
 

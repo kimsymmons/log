@@ -71,8 +71,13 @@
   --type-project: var(--accent-text);
   --type-idea: var(--sticky-yellow-text);
   --type-thread: var(--sticky-green-text);
+  --type-chat: var(--sticky-green-text);
   --type-doc: var(--sticky-blue-text);
   --type-sketch: #FFA475;
+  --type-agent: var(--accent-text);
+  --type-skill: var(--orange);
+  --type-mcp: var(--blue);
+  --type-gem: var(--purple);
 
   --purple: #B59AFF;
   --scrim: rgba(0, 0, 0, 0.6);

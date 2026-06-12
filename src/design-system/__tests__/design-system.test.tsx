@@ -115,17 +115,14 @@ describe('Button', () => {
 })
 
 describe('CanvasFilterBar', () => {
-  it('renders All pill and all type pills', () => {
+  it('renders All pill and every node-type pill', () => {
     render(<CanvasFilterBar />)
-    expect(screen.getByText('All')).toBeTruthy()
-    expect(screen.getByText('Project')).toBeTruthy()
-    expect(screen.getByText('Idea')).toBeTruthy()
-    expect(screen.getByText('Thread')).toBeTruthy()
-    expect(screen.getByText('Doc')).toBeTruthy()
-    expect(screen.getByText('Sketch')).toBeTruthy()
+    for (const label of ['All', 'Project', 'Idea', 'Chat', 'Doc', 'Sketch', 'Agent', 'Skill', 'MCP', 'Gem']) {
+      expect(screen.getByText(label)).toBeTruthy()
+    }
   })
 
-  it('calls onToggle with type when a type pill is clicked', () => {
+  it('calls onToggle with the type key when a type pill is clicked', () => {
     const onToggle = vi.fn()
     render(<CanvasFilterBar onToggle={onToggle} />)
     fireEvent.click(screen.getByText('Project'))
@@ -137,6 +134,12 @@ describe('CanvasFilterBar', () => {
     render(<CanvasFilterBar onClear={onClear} active={['project']} />)
     fireEvent.click(screen.getByText('All'))
     expect(onClear).toHaveBeenCalledOnce()
+  })
+
+  it('renders count badges when counts are supplied', () => {
+    render(<CanvasFilterBar counts={{ chat: 3, project: 1 }} />)
+    expect(screen.getByText('(3)')).toBeTruthy()
+    expect(screen.getByText('(1)')).toBeTruthy()
   })
 })
 

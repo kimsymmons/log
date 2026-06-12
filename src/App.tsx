@@ -31,6 +31,8 @@ import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
+import { FilterProvider } from './canvas/FilterContext'
+import { FilterBarMount } from './canvas/FilterBarMount'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -773,6 +775,7 @@ export default function App() {
   const components = React.useMemo(() => ({
     InFrontOfTheCanvas: CanvasOverlays,
     Toolbar: MinimalToolbar,
+    TopPanel: FilterBarMount,
     PageMenu: null,
   }), [])
 
@@ -781,17 +784,19 @@ export default function App() {
   return (
     <CommandPaletteContext.Provider value={paletteCtx}>
       <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
-        <div style={{ position: 'fixed', inset: 0 }}>
-          <Tldraw
-            shapeUtils={shapeUtils}
-            onMount={(editor) => {
-              window.__tldrawEditor = editor
-              return setupPersistence(editor)
-            }}
-            components={components}
-            options={options}
-          />
-        </div>
+        <FilterProvider>
+          <div style={{ position: 'fixed', inset: 0 }}>
+            <Tldraw
+              shapeUtils={shapeUtils}
+              onMount={(editor) => {
+                window.__tldrawEditor = editor
+                return setupPersistence(editor)
+              }}
+              components={components}
+              options={options}
+            />
+          </div>
+        </FilterProvider>
       </InkContext.Provider>
     </CommandPaletteContext.Provider>
   )

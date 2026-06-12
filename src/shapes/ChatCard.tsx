@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   BaseBoxShapeUtil,
-  HTMLContainer,
   T,
   type TLBaseShape,
   type TLShapePartial,
   type Editor,
 } from 'tldraw'
+import { FilterDimContainer } from '../canvas/FilterContext'
 import type { ArtifactSsePayload } from '../types/artifact'
 import {
   artifactTypeToShapeType,
@@ -439,9 +439,9 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
 
   component(shape: ChatCardShape) {
     return (
-      <HTMLContainer style={{ pointerEvents: 'all' }}>
+      <FilterDimContainer shape={shape} dataShapeType="chat-card">
         <ChatCardInner shape={shape} />
-      </HTMLContainer>
+      </FilterDimContainer>
     )
   }
 

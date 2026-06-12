@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import {
   BaseBoxShapeUtil,
-  HTMLContainer,
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { FilterDimContainer } from '../canvas/FilterContext'
 import { AgentNode } from '../design-system/AgentNode'
 import { Tag } from '../design-system/Tag'
 
@@ -230,12 +230,9 @@ export class AgentCardShapeUtil extends BaseBoxShapeUtil<AgentCardShape> {
 
   component(shape: AgentCardShape) {
     return (
-      <HTMLContainer
-        data-shape-type="agent-card"
-        style={{ pointerEvents: 'all' }}
-      >
+      <FilterDimContainer shape={shape} dataShapeType="agent-card">
         <AgentCardInner shape={shape} />
-      </HTMLContainer>
+      </FilterDimContainer>
     )
   }
 

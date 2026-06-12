@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
   BaseBoxShapeUtil,
-  HTMLContainer,
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { FilterDimContainer } from '../canvas/FilterContext'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -180,12 +180,9 @@ export class MusingShapeUtil extends BaseBoxShapeUtil<MusingShape> {
 
   component(shape: MusingShape) {
     return (
-      <HTMLContainer
-        data-shape-type="musing"
-        style={{ pointerEvents: 'all' }}
-      >
+      <FilterDimContainer shape={shape} dataShapeType="musing">
         <MusingInner shape={shape} />
-      </HTMLContainer>
+      </FilterDimContainer>
     )
   }
 
