@@ -54,8 +54,12 @@ export interface InkGroupNode extends BaseNode {
   style: Record<string, unknown>
 }
 
+export type ProjectLifecycleStatus = 'active' | 'paused' | 'complete' | 'stale'
+
 export interface RegionNode extends BaseNode {
   type: 'region'
+  status: ProjectLifecycleStatus
+  updatedAt: number
 }
 
 export type LogNode = ChatNode | ArtifactNode | InkGroupNode | RegionNode
