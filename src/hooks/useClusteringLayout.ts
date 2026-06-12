@@ -25,7 +25,7 @@ export function useClusteringLayout(editor: Editor | null) {
     if (!editor) return
 
     const worker = new Worker(
-      new URL('./clustering.worker.ts', import.meta.url),
+      new URL('../layout/clustering.worker.ts', import.meta.url),
       { type: 'module' }
     )
     workerRef.current = worker
