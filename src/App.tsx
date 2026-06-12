@@ -24,6 +24,7 @@ import type { LogNode } from './model/nodes'
 import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
+import { useClusteringLayout } from './hooks/useClusteringLayout'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -653,7 +654,9 @@ function GlobalKeyboardShortcuts() {
 // ── App ──────────────────────────────────────────────────────────────────────
 
 function CanvasOverlays() {
+  const editor = useEditor()
   const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
+  useClusteringLayout(editor)
   return (
     <>
       <TetherOverlay />

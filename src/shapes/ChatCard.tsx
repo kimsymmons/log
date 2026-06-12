@@ -31,6 +31,7 @@ export type ChatCardShape = TLBaseShape<'chat-card', {
   messages: Message[]
   summary: string
   createdAt: number
+  tags?: string[]
 }>
 
 // ── State machine ──────────────────────────────────────────────────────────
@@ -390,6 +391,7 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     messages: T.arrayOf(T.object({ role: T.string, content: T.string })),
     summary: T.string,
     createdAt: T.number,
+    tags: T.optional(T.arrayOf(T.string)),
   }
 
   // Tracks artifact offsets at drag start so they can follow the parent
@@ -403,6 +405,7 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
       messages: [],
       summary: '',
       createdAt: Date.now(),
+      tags: [],
     }
   }
 
