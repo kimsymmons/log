@@ -23,6 +23,7 @@ import { createLocalNodeStore } from './persistence/local'
 import type { LogNode } from './model/nodes'
 import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
+import { CommandPalette, CommandPaletteContext } from './CommandPalette'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -327,6 +328,7 @@ function MinimalToolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<string | null>(null)
   const { inkActive, eraserActive, setInkActive, setEraserActive } = React.useContext(InkContext)
+  const { registerImport, registerGroupClusters } = React.useContext(CommandPaletteContext)
 
   const handleInkToggle = useCallback(() => {
     const next = !inkActive
@@ -464,6 +466,14 @@ function MinimalToolbar() {
     setTimeout(() => setToast(null), 3000)
   }, [editor])
 
+  useEffect(() => {
+    registerImport(() => fileInputRef.current?.click())
+  }, [registerImport])
+
+  useEffect(() => {
+    registerGroupClusters(() => { void handleGroupClusters() })
+  }, [registerGroupClusters, handleGroupClusters])
+
   return (
     <>
       <DefaultToolbar>
@@ -582,25 +592,63 @@ function MinimalToolbar() {
 
 // ── Ink context ───────────────────────────────────────────────────────────────
 
-import type { Stroke } from './ink/InkLayer'
+import { InkContext } from './ink/InkContext'
 
-interface InkCtx {
-  inkActive: boolean
-  eraserActive: boolean
-  strokes: Stroke[]
-  setInkActive: (v: boolean) => void
-  setEraserActive: (v: boolean) => void
-  setStrokes: (v: Stroke[]) => void
+// ── GlobalKeyboardShortcuts ──────────────────────────────────────────────────
+
+function GlobalKeyboardShortcuts() {
+  const editor = useEditor()
+  const { open: paletteOpen } = React.useContext(CommandPaletteContext)
+
+  useEffect(() => {
+    const isTyping = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      return (
+        t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.isContentEditable
+      )
+    }
+
+    const handler = (e: KeyboardEvent) => {
+      if (paletteOpen) return
+      if (isTyping(e)) return
+
+      switch (e.key) {
+        case 'Escape':
+          editor.selectNone()
+          break
+        case 'Delete':
+        case 'Backspace': {
+          const ids = editor.getSelectedShapeIds()
+          if (ids.length) editor.deleteShapes(ids)
+          break
+        }
+        case ' ': {
+          e.preventDefault()
+          editor.setCurrentTool(editor.getCurrentToolId() === 'hand' ? 'select' : 'hand')
+          break
+        }
+        case 'f':
+        case 'F':
+          editor.zoomToFit()
+          break
+        case '+':
+        case '=':
+          editor.zoomIn()
+          break
+        case '-':
+          editor.zoomOut()
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [editor, paletteOpen])
+
+  return null
 }
-
-const InkContext = React.createContext<InkCtx>({
-  inkActive: false,
-  eraserActive: false,
-  strokes: [],
-  setInkActive: () => {},
-  setEraserActive: () => {},
-  setStrokes: () => {},
-})
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
@@ -616,6 +664,8 @@ function CanvasOverlays() {
         strokes={strokes}
         onStrokesChange={setStrokes}
       />
+      <CommandPalette />
+      <GlobalKeyboardShortcuts />
     </>
   )
 }
@@ -630,23 +680,59 @@ export default function App() {
     if (!v) setEraserActive(false)
   }, [])
 
+  // ── Command palette state ──
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteQuery, setPaletteQuery] = useState('')
+  const [onImport, setOnImport] = useState<(() => void) | null>(null)
+  const [onGroupClusters, setOnGroupClusters] = useState<(() => void) | null>(null)
+
+  // useState setter wraps functions in a thunk to avoid setState(fn) ambiguity
+  const registerImport = useCallback((fn: () => void) => { setOnImport(() => fn) }, [])
+  const registerGroupClusters = useCallback((fn: () => void) => { setOnGroupClusters(() => fn) }, [])
+
+  // Cmd+K / Ctrl+K to open palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen(v => !v)
+        setPaletteQuery('')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const paletteCtx = React.useMemo(() => ({
+    open: paletteOpen,
+    setOpen: setPaletteOpen,
+    query: paletteQuery,
+    setQuery: setPaletteQuery,
+    onImport,
+    onGroupClusters,
+    registerImport,
+    registerGroupClusters,
+  }), [paletteOpen, paletteQuery, onImport, onGroupClusters, registerImport, registerGroupClusters])
+
   const components = React.useMemo(() => ({
     InFrontOfTheCanvas: CanvasOverlays,
     Toolbar: MinimalToolbar,
   }), [])
 
   return (
-    <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
-      <div style={{ position: 'fixed', inset: 0 }}>
-        <Tldraw
-          shapeUtils={shapeUtils}
-          onMount={(editor) => {
-            window.__tldrawEditor = editor
-            return setupPersistence(editor)
-          }}
-          components={components}
-        />
-      </div>
-    </InkContext.Provider>
+    <CommandPaletteContext.Provider value={paletteCtx}>
+      <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
+        <div style={{ position: 'fixed', inset: 0 }}>
+          <Tldraw
+            shapeUtils={shapeUtils}
+            onMount={(editor) => {
+              window.__tldrawEditor = editor
+              return setupPersistence(editor)
+            }}
+            components={components}
+          />
+        </div>
+      </InkContext.Provider>
+    </CommandPaletteContext.Provider>
   )
 }
