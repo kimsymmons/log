@@ -146,7 +146,7 @@ interface LinkPopover {
   y: number
 }
 
-const API_BASE = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+const API_BASE = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
 const AUTH_TOKEN = () => localStorage.getItem('auth_token') ?? ''
 
 async function fetchLinksForShape(shapeId: string): Promise<ArtifactLink[]> {
@@ -377,7 +377,7 @@ function MinimalToolbar() {
       })
     })
 
-    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
     const authToken = localStorage.getItem('auth_token') ?? ''
     fetch(`${apiBase}/import/chats`, {
       method: 'POST',
@@ -400,7 +400,7 @@ function MinimalToolbar() {
   }, [editor])
 
   const handleGroupClusters = useCallback(async () => {
-    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
     const authToken = localStorage.getItem('auth_token') ?? ''
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (authToken) headers.Authorization = `Bearer ${authToken}`

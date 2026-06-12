@@ -16,7 +16,7 @@ export type Stroke = {
 
 const INK_COLOR = '#1a1a1a'
 const BASE_WIDTH = 3
-const API_BASE = (typeof import.meta !== 'undefined' && (import.meta.env as Record<string, string>).VITE_API_URL) ?? ''
+const API_BASE = (typeof import.meta !== 'undefined' && (import.meta.env as Record<string, string>).VITE_API_URL) ?? 'http://localhost:3001'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

@@ -145,7 +145,7 @@ function ChatCardInner({ shape }: { shape: ChatCardShape }) {
     setStreamedContent('')
     dispatch('startStreaming')
 
-    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? ''
+    const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
     const authToken = localStorage.getItem('auth_token') ?? ''
 
     try {
