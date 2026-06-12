@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import request from 'supertest'
-import { createApp } from '../index'
+import { createApp, authRateMap } from '../index'
 import { getServerDb } from '../db'
 import Database from 'better-sqlite3'
 import * as os from 'os'
@@ -34,6 +34,7 @@ afterEach(() => {
   db.close()
   if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath)
   vi.clearAllMocks()
+  authRateMap.clear()
 })
 
 describe('POST /auth/request', () => {
@@ -49,6 +50,20 @@ describe('POST /auth/request', () => {
   it('returns 400 for missing email', async () => {
     const res = await request(app).post('/auth/request').send({})
     expect(res.status).toBe(400)
+  })
+
+  it('returns 400 when email is a non-string type', async () => {
+    const res = await request(app).post('/auth/request').send({ email: 123 })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 429 after 5 requests within 60 seconds', async () => {
+    for (let i = 0; i < 5; i++) {
+      await request(app).post('/auth/request').send({ email: 'ratelimit@example.com' })
+    }
+    const res = await request(app).post('/auth/request').send({ email: 'ratelimit@example.com' })
+    expect(res.status).toBe(429)
+    expect(res.body.error).toBe('Too many requests')
   })
 })
 

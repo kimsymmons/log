@@ -257,6 +257,26 @@ describe('POST /clusters/suggest', () => {
     expect(res.status).toBe(200)
     expect(Array.isArray(res.body)).toBe(true)
   })
+
+  it('returns 500 with a generic error message when Anthropic client throws', async () => {
+    insertArtifact('a1', 'x'); insertArtifact('a2', 'y'); insertArtifact('a3', 'z')
+    insertLink('a1', 'a2'); insertLink('a2', 'a3')
+    const throwingMock: AnthropicLike = {
+      messages: {
+        stream: vi.fn(),
+        create: vi.fn().mockRejectedValue(new Error('upstream API error')),
+      },
+    }
+    const app = createApp(db, throwingMock)
+    const res = await request(app)
+      .post('/clusters/suggest')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({})
+    expect(res.status).toBe(500)
+    expect(res.body.error).toBeDefined()
+    // Should not expose a full stack trace — just an error message string
+    expect(typeof res.body.error).toBe('string')
+  })
 })
 
 // ── Route: POST /clusters/apply ─────────────────────────────────────────────

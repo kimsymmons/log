@@ -94,13 +94,15 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     db.prepare('INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)').run(id, Date.now())
   }
 
-  // Create link_feedback if it doesn't exist yet (original path)
+  // Create link_feedback if it doesn't exist yet (original path).
+  // link_feedback is an event log — link_id is stored as plain TEXT so audit
+  // rows survive link deletion (no FK so no cascade or null-out on delete).
   const feedbackCols = db.pragma('table_info(link_feedback)') as Array<{ name: string }>
   if (feedbackCols.length === 0) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS link_feedback (
         id TEXT PRIMARY KEY,
-        link_id TEXT REFERENCES artifact_links(id) ON DELETE CASCADE,
+        link_id TEXT NOT NULL,
         action TEXT NOT NULL,
         created_at INTEGER NOT NULL
       )
@@ -108,14 +110,14 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     markMigration('link_feedback_fk_v1')
   }
 
-  // Migration: add FK ON DELETE CASCADE to link_feedback.link_id
-  // SQLite cannot ALTER to add FKs, so we recreate the table and copy rows.
+  // Migration: remove FK from link_feedback.link_id so audit rows survive link deletion.
+  // SQLite cannot ALTER columns, so we recreate the table and copy rows.
   if (!hasMigration('link_feedback_fk_v1')) {
     db.exec(`
       BEGIN;
       CREATE TABLE link_feedback_new (
         id TEXT PRIMARY KEY,
-        link_id TEXT REFERENCES artifact_links(id) ON DELETE CASCADE,
+        link_id TEXT NOT NULL,
         action TEXT NOT NULL,
         created_at INTEGER NOT NULL
       );

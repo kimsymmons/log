@@ -15,4 +15,8 @@ describe('estimateCost', () => {
   it('returns 0 for unknown model', () => {
     expect(estimateCost('unknown-model-xyz', 1000, 500)).toBe(0)
   })
+
+  it('returns a positive number for claude-haiku-4-5-20251001', () => {
+    expect(estimateCost('claude-haiku-4-5-20251001', 1000, 500)).toBeGreaterThan(0)
+  })
 })

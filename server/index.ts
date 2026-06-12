@@ -58,8 +58,8 @@ export type AnthropicLike = {
 const AUTH_RATE_WINDOW_MS = 60_000
 const AUTH_RATE_LIMIT = 5
 
-// Per-email request timestamps within the sliding window
-const authRateMap = new Map<string, number[]>()
+// Per-email request timestamps within the sliding window (exported for test reset)
+export const authRateMap = new Map<string, number[]>()
 
 function isRateLimited(email: string): boolean {
   const now = Date.now()
