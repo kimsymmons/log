@@ -8,6 +8,7 @@ import {
 import { Tag } from '../design-system/Tag'
 import { KeyHint } from '../design-system/KeyHint'
 import { Icon } from '../design-system/Icon'
+import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,12 +28,16 @@ export const DEFAULT_SKILL_SIZE = { w: 280, h: 160 }
 
 export function SkillInner({ shape }: { shape: SkillShape }) {
   const { name, description, invocationKey, tags } = shape.props
+  const detail = useDetailLevel()
+  const d = detailDisplay(detail)
 
   return (
     <div
+      data-detail={detail}
       style={{
         width: shape.props.w,
-        height: shape.props.h,
+        height: d.minimal ? 'auto' : shape.props.h,
+        minHeight: d.minimal ? 40 : undefined,
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-2)',
         borderTop: '2px solid var(--orange)',
@@ -46,7 +51,7 @@ export function SkillInner({ shape }: { shape: SkillShape }) {
         boxShadow: 'var(--shadow-card)',
       }}
     >
-      {/* header */}
+      {/* header: glyph + title (always visible) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <Icon name="wrench" size={14} color="var(--orange)" />
         <span style={{
@@ -60,27 +65,32 @@ export function SkillInner({ shape }: { shape: SkillShape }) {
         }}>
           {name || 'Untitled skill'}
         </span>
-        <KeyHint keys={invocationKey} />
+        <span style={{ display: d.secondary }}>
+          <KeyHint keys={invocationKey} />
+        </span>
       </div>
 
-      {/* description */}
-      <p style={{
-        margin: 0,
-        fontSize: 'var(--text-xs)',
-        color: 'var(--text-2)',
-        lineHeight: 'var(--leading-normal)',
-        overflow: 'hidden',
-        display: '-webkit-box',
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical',
-        flex: 1,
-      }}>
+      {/* description (body) */}
+      <p
+        data-detail-body
+        style={{
+          margin: 0,
+          fontSize: 'var(--text-xs)',
+          color: 'var(--text-2)',
+          lineHeight: 'var(--leading-normal)',
+          overflow: 'hidden',
+          display: d.body ?? '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          flex: 1,
+        }}
+      >
         {description || <span style={{ color: 'var(--text-4)' }}>No description</span>}
       </p>
 
       {/* tags */}
       {tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <div style={{ display: d.secondary ?? 'flex', gap: 4, flexWrap: 'wrap' }}>
           {tags.map(tag => (
             <Tag key={tag} label={tag} />
           ))}

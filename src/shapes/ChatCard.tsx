@@ -13,6 +13,7 @@ import {
   ARTIFACT_COLLAPSED_SIZE,
   type AnyArtifactShape,
 } from './ArtifactShapes'
+import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,8 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
   const [inputValue, setInputValue] = useState('')
   const [streamedContent, setStreamedContent] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const detail = useDetailLevel()
+  const d = detailDisplay(detail)
 
   const dispatch = useCallback((event: ChatCardEvent) => {
     setUiState(prev => chatCardTransition(prev, event))
@@ -229,9 +232,11 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
   if (uiState === 'collapsed') {
     return (
       <div
+        data-detail={detail}
         style={{
           width: COLLAPSED_SIZE.w,
-          height: COLLAPSED_SIZE.h,
+          height: d.minimal ? 'auto' : COLLAPSED_SIZE.h,
+          minHeight: d.minimal ? 40 : undefined,
           background: '#f7f7f7',
           border: errorMessage ? '1px solid #e74c3c' : '1px solid #ccc',
           borderRadius: 6,
@@ -249,15 +254,15 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
           {title}
         </div>
         {errorMessage ? (
-          <div style={{ fontSize: 11, color: '#e74c3c', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          <div data-detail-body style={{ display: d.body ?? 'block', fontSize: 11, color: '#e74c3c', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             Error: {errorMessage}
           </div>
         ) : (
-          <div style={{ fontSize: 11, color: '#555', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          <div data-detail-body style={{ display: d.body ?? 'block', fontSize: 11, color: '#555', flexGrow: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             {summary || 'No summary yet.'}
           </div>
         )}
-        <div style={{ fontSize: 10, color: '#999' }}>
+        <div style={{ display: d.secondary ?? 'block', fontSize: 10, color: '#999' }}>
           {relativeTime(createdAt)}
         </div>
       </div>
