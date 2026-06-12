@@ -717,7 +717,10 @@ export default function App() {
   const components = React.useMemo(() => ({
     InFrontOfTheCanvas: CanvasOverlays,
     Toolbar: MinimalToolbar,
+    PageMenu: null,
   }), [])
+
+  const options = React.useMemo(() => ({ maxPages: 1 }), [])
 
   return (
     <CommandPaletteContext.Provider value={paletteCtx}>
@@ -730,6 +733,7 @@ export default function App() {
               return setupPersistence(editor)
             }}
             components={components}
+            options={options}
           />
         </div>
       </InkContext.Provider>
