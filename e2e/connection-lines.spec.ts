@@ -1,16 +1,17 @@
 import { test, expect } from 'playwright/test'
 
-// PEO-152 — connection lines. Nodes that share a tag are joined by an SVG line
-// (with a dot anchor at its midpoint) drawn in `InFrontOfTheCanvas`. The line is
-// subtle indigo by default and lights up in the tag's colour when either
-// endpoint is hovered or selected.
+// Connection lines (TagConnectionOverlay). Nodes that share a tag are joined by
+// an SVG line drawn in `InFrontOfTheCanvas`, anchored at the node edges. Lines
+// are subtle by default and light up in the hovered tag's colour when its chip
+// is hovered (focus follows tags — covered in thread-cards.spec). Here we cover
+// that a line exists iff a tag is shared, and that it tracks the camera.
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.removeItem('log:canvas:v1')
   })
   await page.goto('/')
-  await page.waitForSelector('.tlui-menu-zone', { timeout: 15_000 })
+  await page.waitForSelector('.tl-canvas', { timeout: 15_000 })
   await page.keyboard.press('Escape')
 })
 
@@ -35,18 +36,6 @@ test('a line is drawn between two nodes that share a tag', async ({ page }) => {
   const svg = page.locator('[data-testid="connection-lines"]')
   await expect(svg).toBeVisible()
   await expect(svg.locator('line')).toHaveCount(1)
-  // dot anchor at the midpoint
-  await expect(svg.locator('circle')).toHaveCount(1)
-})
-
-test('the connection is dim by default and highlights on hover', async ({ page }) => {
-  await seedTaggedPair(page)
-  const group = page.locator('[data-testid="connection-lines"] g')
-  await expect(group).toHaveAttribute('data-highlighted', 'false')
-
-  // Hover the first node — the line connecting it should highlight.
-  await page.locator('[data-shape-type="skill"]').first().hover()
-  await expect(group).toHaveAttribute('data-highlighted', 'true')
 })
 
 test('the line tracks the camera on pan and zoom (no drift)', async ({ page }) => {
@@ -98,5 +87,5 @@ test('no line is drawn when nodes do not share a tag', async ({ page }) => {
     editor.selectNone()
     editor.zoomToFit({ immediate: true })
   })
-  await expect(page.locator('[data-testid="connection-lines"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="connection-lines"] line')).toHaveCount(0)
 })

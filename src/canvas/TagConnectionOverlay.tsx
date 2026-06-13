@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
-import { useEditor } from 'tldraw'
-import type { ChatCardShape } from '../shapes/ChatCard'
+import { useEditor, useValue, type Editor, type TLShape } from 'tldraw'
 import { useTagFocus } from './TagFocusContext'
 import { tagColorFor } from './tagStore'
+
+/** String tags on any shape (chat cards, skills, gems, …), or []. */
+function shapeTags(s: TLShape): string[] {
+  const t = (s.props as { tags?: unknown }).tags
+  return Array.isArray(t) ? t.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
+}
 
 interface ConnLine {
   key: string
@@ -38,77 +42,72 @@ export function rectEdgePoint(
 const highlightColor = (tag: string) => `var(--sticky-${tagColorFor(tag)}-text)`
 
 /**
+ * All shared-tag connections + hub junctions for the current camera, in screen
+ * space. Pure read over editor signals so it can run inside `useValue` and
+ * recompute reactively on every camera, shape and tag change.
+ */
+function buildConnections(editor: Editor): { lines: ConnLine[]; junctions: Junction[] } {
+  // Connections derive from shared tags on ANY node type (chat cards, skills,
+  // gems, musings, …), never just chat cards.
+  const cards = editor
+    .getCurrentPageShapes()
+    .map((s) => ({ shape: s, bounds: editor.getShapePageBounds(s), tags: shapeTags(s) }))
+    .filter((c) => c.tags.length > 0 && c.bounds != null)
+
+  if (cards.length > MAX_TAGGED_CARDS) return { lines: [], junctions: [] }
+
+  const lines: ConnLine[] = []
+  const degree = new Map<string, number>()
+  for (let i = 0; i < cards.length; i++) {
+    for (let j = i + 1; j < cards.length; j++) {
+      const a = cards[i]
+      const b = cards[j]
+      const setA = new Set(a.tags.map((t) => t.toLowerCase()))
+      const shared = b.tags.filter((t) => setA.has(t.toLowerCase()))
+      if (shared.length === 0) continue
+
+      const ba = a.bounds!
+      const bb = b.bounds!
+      // Anchor at the card edges (segment ∩ rectangle), in page space.
+      const aEdge = rectEdgePoint(ba.midX, ba.midY, ba.w / 2, ba.h / 2, bb.midX, bb.midY)
+      const bEdge = rectEdgePoint(bb.midX, bb.midY, bb.w / 2, bb.h / 2, ba.midX, ba.midY)
+      const p1 = editor.pageToScreen(aEdge)
+      const p2 = editor.pageToScreen(bEdge)
+      lines.push({ key: `${a.shape.id}__${b.shape.id}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, tags: shared })
+      degree.set(a.shape.id, (degree.get(a.shape.id) ?? 0) + 1)
+      degree.set(b.shape.id, (degree.get(b.shape.id) ?? 0) + 1)
+    }
+  }
+
+  // Junction dots where 3+ lines meet (a hub card).
+  const junctions: Junction[] = []
+  for (const c of cards) {
+    if ((degree.get(c.shape.id) ?? 0) < 3) continue
+    const center = editor.pageToScreen({ x: c.bounds!.midX, y: c.bounds!.midY })
+    junctions.push({ key: c.shape.id, cx: center.x, cy: center.y, tags: c.tags })
+  }
+
+  return { lines, junctions }
+}
+
+/**
  * Connections derive from shared tags — never hand-drawn, never stored. A line
- * joins every pair of cards that share a tag, anchored at the card edges;
- * where three or more lines meet (a hub card) a junction dot is drawn. Lines
- * stay quiet navy by default and light up in the hovered tag's own colour when
- * that tag's chip is hovered (focus follows tags).
+ * joins every pair of nodes that share a tag, anchored at the node edges;
+ * where three or more lines meet (a hub) a junction dot is drawn. Lines stay
+ * quiet navy by default and light up in the hovered tag's own colour when that
+ * tag's chip is hovered (focus follows tags).
  */
 export function TagConnectionOverlay() {
   const editor = useEditor()
   const { hovered } = useTagFocus()
-  const [lines, setLines] = useState<ConnLine[]>([])
-  const [junctions, setJunctions] = useState<Junction[]>([])
-
-  useEffect(() => {
-    const compute = () => {
-      const cards = editor
-        .getCurrentPageShapes()
-        .filter((s): s is ChatCardShape => s.type === 'chat-card')
-        .map((s) => ({ shape: s, bounds: editor.getShapePageBounds(s), tags: (s.props.tags ?? []).filter(Boolean) }))
-        .filter((c) => c.tags.length > 0 && c.bounds != null)
-
-      if (cards.length > MAX_TAGGED_CARDS) {
-        setLines([])
-        setJunctions([])
-        return
-      }
-
-      const nextLines: ConnLine[] = []
-      const degree = new Map<string, number>()
-      for (let i = 0; i < cards.length; i++) {
-        for (let j = i + 1; j < cards.length; j++) {
-          const a = cards[i]
-          const b = cards[j]
-          const setA = new Set(a.tags.map((t) => t.toLowerCase()))
-          const shared = b.tags.filter((t) => setA.has(t.toLowerCase()))
-          if (shared.length === 0) continue
-
-          const ba = a.bounds!
-          const bb = b.bounds!
-          // Anchor at the card edges (segment ∩ rectangle), in page space.
-          const aEdge = rectEdgePoint(ba.midX, ba.midY, ba.w / 2, ba.h / 2, bb.midX, bb.midY)
-          const bEdge = rectEdgePoint(bb.midX, bb.midY, bb.w / 2, bb.h / 2, ba.midX, ba.midY)
-          const p1 = editor.pageToScreen(aEdge)
-          const p2 = editor.pageToScreen(bEdge)
-          nextLines.push({ key: `${a.shape.id}__${b.shape.id}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, tags: shared })
-          degree.set(a.shape.id, (degree.get(a.shape.id) ?? 0) + 1)
-          degree.set(b.shape.id, (degree.get(b.shape.id) ?? 0) + 1)
-        }
-      }
-
-      // Junction dots where 3+ lines meet (a hub card).
-      const nextJunctions: Junction[] = []
-      for (const c of cards) {
-        if ((degree.get(c.shape.id) ?? 0) < 3) continue
-        const center = editor.pageToScreen({ x: c.bounds!.midX, y: c.bounds!.midY })
-        nextJunctions.push({ key: c.shape.id, cx: center.x, cy: center.y, tags: c.tags })
-      }
-
-      setLines(nextLines)
-      setJunctions(nextJunctions)
-    }
-
-    compute()
-    return editor.store.listen(compute)
-  }, [editor])
+  const { lines, junctions } = useValue('connections', () => buildConnections(editor), [editor])
 
   if (lines.length === 0) return null
 
   const isHot = (tags: string[]) => hovered != null && tags.some((t) => t.toLowerCase() === hovered.toLowerCase())
 
   return (
-    <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}>
+    <svg data-testid="connection-lines" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}>
       {lines.map(({ key, x1, y1, x2, y2, tags }) => {
         const hot = isHot(tags)
         return (

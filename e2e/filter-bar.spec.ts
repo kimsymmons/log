@@ -2,11 +2,11 @@ import { test, expect } from 'playwright/test'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-  await page.waitForSelector('.tlui-menu-zone', { timeout: 15_000 })
+  await page.waitForSelector('.tl-canvas', { timeout: 15_000 })
   // Start from a clean canvas — clear any persisted shapes, then reload.
   await page.evaluate(() => localStorage.removeItem('log:canvas:v1'))
   await page.reload()
-  await page.waitForSelector('.tlui-menu-zone', { timeout: 15_000 })
+  await page.waitForSelector('.tl-canvas', { timeout: 15_000 })
   await page.keyboard.press('Escape')
 })
 
@@ -18,7 +18,9 @@ test('filter bar renders with All and node-type pills', async ({ page }) => {
   await expect(bar).toBeVisible()
   await expect(page.getByRole('button', { name: 'All', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /Idea/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Skill/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Thread/ })).toBeVisible()
+  // Agent/Skill/MCP/Gem are not filter pills (the five canonical card types only).
+  await expect(page.getByRole('button', { name: /Skill/ })).toHaveCount(0)
 })
 
 test('activating a filter dims non-matching shapes; All restores them', async ({ page }) => {

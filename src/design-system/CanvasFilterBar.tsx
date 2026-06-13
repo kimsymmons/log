@@ -33,7 +33,7 @@ export function CanvasFilterBar({ active = [], onToggle, onClear, style }: Canva
       aria-label="Filter node types"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4, padding: 5,
-        background: 'var(--bg-overlay)', border: '1px solid var(--border-1)',
+        background: 'var(--bg-raised)', border: '1px solid var(--border-1)',
         borderRadius: 'var(--radius-4)', boxShadow: 'var(--shadow-floating)',
         pointerEvents: 'all',
         ...style,

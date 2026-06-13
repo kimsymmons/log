@@ -51,3 +51,15 @@ Two-layer approach: Vitest for units/integration, Playwright for E2E.
   backend `POST /auth/test-token` (set `TEST_API_URL` for a non-local backend),
   writing `e2e/.auth/token.json`. Specs seed it into `localStorage.auth_token`.
 - Refresh baselines: `npx playwright test e2e/visual-baseline.spec.ts --update-snapshots`.
+- Component-level visuals live in `e2e/visual/` (thread card, connection line, filter bar, toolbar, zoom pill).
+
+## PR review process
+
+Before every merge:
+1. Run `npm test` + `tsc` — must be clean
+2. Start the app locally, screenshot it, check the visual audit checklist (see memory)
+3. Run `npm run test:e2e` — includes visual regression tests
+4. No raw hex values in changed files — CSS variables only
+5. tldraw default chrome must be hidden; custom chrome must match design spec positions
+
+Visual audit checklist covers: nav/shell, canvas inset, dot grid, tldraw UI hidden, filter bar pills, toolbar, zoom pill font (--font-mono), card typography, surface colours.

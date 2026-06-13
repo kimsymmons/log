@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
     localStorage.removeItem('log:canvas:v1')
   })
   await page.goto('/')
-  await page.waitForSelector('.tlui-menu-zone', { timeout: 15_000 })
+  await page.waitForSelector('.tl-canvas', { timeout: 15_000 })
   await page.keyboard.press('Escape')
 })
 
