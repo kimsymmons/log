@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from 'express'
 import Database from 'better-sqlite3'
 import { ulid } from 'ulid'
 import Anthropic from '@anthropic-ai/sdk'
+import type { MessageStreamEvent, RawContentBlockDeltaEvent, TextDelta } from '@anthropic-ai/sdk/resources/messages'
 import { getServerDb } from './db'
 import { sendMagicLink } from './email'
 import { signToken, verifyToken } from './jwt'
@@ -211,11 +212,13 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
       })
 
       for await (const event of streamResp) {
+        const streamEvent = event as MessageStreamEvent
         if (
-          event.type === 'content_block_delta' &&
-          event.delta.type === 'text_delta'
+          streamEvent.type === 'content_block_delta' &&
+          (streamEvent as RawContentBlockDeltaEvent).delta.type === 'text_delta'
         ) {
-          const text = event.delta.text
+          const textDelta = (streamEvent as RawContentBlockDeltaEvent).delta as TextDelta
+          const text = textDelta.text
           accumulatedContent += text
           res.write(`data: ${JSON.stringify({ delta: text })}\n\n`)
         }
@@ -244,7 +247,13 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
         })
         inputTokens += summaryResp.usage?.input_tokens ?? 0
         outputTokens += summaryResp.usage?.output_tokens ?? 0
-        const raw = summaryResp.content[0]?.type === 'text' ? summaryResp.content[0].text : ''
+        const contentBlock = summaryResp.content[0]
+        let raw: string
+        if (contentBlock && contentBlock.type === 'text') {
+          raw = (contentBlock as { text: string }).text
+        } else {
+          raw = ''
+        }
         const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
         const parsed = JSON.parse(jsonStr) as { title?: string; body?: string }
         summaryTitle = parsed.title ?? summaryTitle
