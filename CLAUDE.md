@@ -46,7 +46,7 @@ Two-layer approach: Vitest for units/integration, Playwright for E2E.
 ## Visual regression harness
 
 `e2e/visual-baseline.spec.ts` captures canvas screenshots against `BASE_URL`
-(default `http://localhost:5173`; set to the live Vercel URL to test production).
+(default `https://log-five-xi.vercel.app`; override with `BASE_URL=http://localhost:5173` to test locally).
 - Auth: `e2e/global-setup.ts` exchanges `TEST_BYPASS_TOKEN` for a JWT via the
   backend `POST /auth/test-token` (set `TEST_API_URL` for a non-local backend),
   writing `e2e/.auth/token.json`. Specs seed it into `localStorage.auth_token`.

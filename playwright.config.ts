@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// Frontend under test. Default to the local Vite dev server; point at the live
-// Vercel deployment with BASE_URL=https://<your-deployment>.vercel.app.
-const baseURL = process.env.BASE_URL ?? 'http://localhost:5173'
+// Frontend under test. Default to the live Vercel deployment. Override with
+// BASE_URL=http://localhost:5173 to test against the local Vite dev server.
+const baseURL = process.env.BASE_URL ?? 'https://log-five-xi.vercel.app'
 const isLocal = baseURL.includes('localhost') || baseURL.includes('127.0.0.1')
 
 export default defineConfig({
@@ -36,7 +36,7 @@ export default defineConfig({
   webServer: isLocal
     ? {
         command: 'npm run dev',
-        url: 'http://localhost:5173',
+        url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 30_000,
       }
