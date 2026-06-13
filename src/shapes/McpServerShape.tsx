@@ -7,6 +7,7 @@ import {
 import { FilterDimContainer } from '../canvas/FilterContext'
 import { Tag } from '../design-system/Tag'
 import { Icon } from '../design-system/Icon'
+import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,12 +38,16 @@ export function McpServerInner({ shape }: { shape: McpServerShape }) {
   const { name, description, endpoint, status, tools, tags } = shape.props
   const visibleTools = tools.slice(0, 3)
   const overflow = tools.length - 3
+  const detail = useDetailLevel()
+  const d = detailDisplay(detail)
 
   return (
     <div
+      data-detail={detail}
       style={{
         width: shape.props.w,
-        height: shape.props.h,
+        height: d.minimal ? 'auto' : shape.props.h,
+        minHeight: d.minimal ? 40 : undefined,
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-2)',
         borderRadius: 'var(--radius-3)',
@@ -55,7 +60,7 @@ export function McpServerInner({ shape }: { shape: McpServerShape }) {
         boxShadow: 'var(--shadow-card)',
       }}
     >
-      {/* header */}
+      {/* header: glyph + title (always visible) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <Icon name="plug" size={14} color="var(--blue)" />
         <span style={{
@@ -73,6 +78,7 @@ export function McpServerInner({ shape }: { shape: McpServerShape }) {
         <span
           data-status={status}
           style={{
+            display: d.secondary ?? 'block',
             width: 8,
             height: 8,
             borderRadius: '50%',
@@ -82,37 +88,44 @@ export function McpServerInner({ shape }: { shape: McpServerShape }) {
         />
       </div>
 
-      {/* description */}
-      <p style={{
-        margin: 0,
-        fontSize: 'var(--text-xs)',
-        color: 'var(--text-2)',
-        lineHeight: 'var(--leading-normal)',
-        overflow: 'hidden',
-        display: '-webkit-box',
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical',
-      }}>
+      {/* description (body) */}
+      <p
+        data-detail-body
+        style={{
+          margin: 0,
+          fontSize: 'var(--text-xs)',
+          color: 'var(--text-2)',
+          lineHeight: 'var(--leading-normal)',
+          overflow: 'hidden',
+          display: d.body ?? '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+        }}
+      >
         {description || <span style={{ color: 'var(--text-4)' }}>No description</span>}
       </p>
 
-      {/* endpoint */}
+      {/* endpoint (external link) */}
       {endpoint && (
-        <span style={{
-          fontSize: 'var(--text-2xs)',
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--text-3)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
+        <span
+          data-detail-link
+          style={{
+            display: d.body ?? 'block',
+            fontSize: 'var(--text-2xs)',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-3)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {endpoint}
         </span>
       )}
 
       {/* tools */}
       {visibleTools.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: d.secondary ?? 'flex', flexDirection: 'column', gap: 2 }}>
           {visibleTools.map(tool => (
             <span key={tool} style={{
               fontSize: 'var(--text-2xs)',
@@ -142,7 +155,7 @@ export function McpServerInner({ shape }: { shape: McpServerShape }) {
 
       {/* tags */}
       {tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <div style={{ display: d.secondary ?? 'flex', gap: 4, flexWrap: 'wrap' }}>
           {tags.map(tag => (
             <Tag key={tag} label={tag} />
           ))}

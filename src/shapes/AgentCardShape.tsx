@@ -7,6 +7,7 @@ import {
 import { FilterDimContainer } from '../canvas/FilterContext'
 import { AgentNode } from '../design-system/AgentNode'
 import { Tag } from '../design-system/Tag'
+import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -68,12 +69,16 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
 
   const statusColor = STATUS_COLOR[status]
   const isRunning = status === 'running'
+  const detail = useDetailLevel()
+  const d = detailDisplay(detail)
 
   return (
     <div
+      data-detail={detail}
       style={{
         width: shape.props.w,
-        height: shape.props.h,
+        height: d.minimal ? 'auto' : shape.props.h,
+        minHeight: d.minimal ? 40 : undefined,
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-2)',
         borderTop: `2px solid ${statusColor}`,
@@ -87,7 +92,7 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
         boxShadow: 'var(--shadow-card)',
       }}
     >
-      {/* header: disc + name + model + elapsed */}
+      {/* header: disc + name (glyph + title, always visible) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <AgentNode
           model={model}
@@ -108,6 +113,7 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
           {agentName || 'Unnamed agent'}
         </span>
         <span style={{
+          display: d.secondary ?? 'block',
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--text-2xs)',
           color: 'var(--text-3)',
@@ -122,7 +128,7 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
       </div>
 
       {/* status row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: d.secondary ?? 'flex', alignItems: 'center', gap: 6 }}>
         <span
           data-status={status}
           style={{
@@ -153,24 +159,27 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
         </span>
       </div>
 
-      {/* task description */}
-      <p style={{
-        margin: 0,
-        fontSize: 'var(--text-xs)',
-        color: 'var(--text-2)',
-        lineHeight: 'var(--leading-normal)',
-        flex: 1,
-        overflow: 'hidden',
-        display: '-webkit-box',
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical',
-      }}>
+      {/* task description (body) */}
+      <p
+        data-detail-body
+        style={{
+          margin: 0,
+          fontSize: 'var(--text-xs)',
+          color: 'var(--text-2)',
+          lineHeight: 'var(--leading-normal)',
+          flex: 1,
+          overflow: 'hidden',
+          display: d.body ?? '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+        }}
+      >
         {taskDescription || <span style={{ color: 'var(--text-4)' }}>No task description</span>}
       </p>
 
-      {/* linked ticket */}
+      {/* linked ticket (external link) */}
       {linkedTicket && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div data-detail-link style={{ display: d.body ?? 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--text-2xs)',
@@ -187,7 +196,7 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
 
       {/* tags */}
       {tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <div style={{ display: d.secondary ?? 'flex', gap: 4, flexWrap: 'wrap' }}>
           {tags.map(tag => (
             <Tag key={tag} label={tag} />
           ))}

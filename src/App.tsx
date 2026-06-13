@@ -30,6 +30,7 @@ import type { LogNode } from './model/nodes'
 import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
+import { ConnectionLines } from './components/ConnectionLines'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
 import { FilterProvider } from './canvas/FilterContext'
 import { FilterBarMount } from './canvas/FilterBarMount'
@@ -714,6 +715,7 @@ function CanvasOverlays() {
   useClusteringLayout(editor)
   return (
     <>
+      <ConnectionLines />
       <TetherOverlay />
       <LinkOverlay />
       <InkLayer
