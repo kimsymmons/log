@@ -45,7 +45,7 @@ export function shapeToNode(shape: TLShape): LogNode | null {
   switch (shape.type) {
     case 'chat-card': {
       const s = shape as ChatCardShape
-      return {
+      const node: LogNode = {
         ...base,
         type: 'chat',
         w: s.props.w,
@@ -54,6 +54,11 @@ export function shapeToNode(shape: TLShape): LogNode | null {
         body: s.props.summary,
         timestamp: new Date(s.props.createdAt).toISOString(),
       }
+      // Persist tags/cardType only when present so existing round-trips
+      // (shapes created without them) stay byte-identical.
+      if (s.props.tags !== undefined) node.tags = s.props.tags
+      if (s.props.cardType !== undefined) node.cardType = s.props.cardType
+      return node
     }
     case 'draw': {
       const s = shape as TLDrawShape
@@ -85,19 +90,19 @@ export function nodeToShape(node: LogNode, pageId: TLParentId): TLShapePartial |
   }
 
   switch (node.type) {
-    case 'chat':
-      return {
-        ...base,
-        type: 'chat-card',
-        props: {
-          w: node.w,
-          h: node.h,
-          title: node.title,
-          messages: [],
-          summary: node.body,
-          createdAt: new Date(node.timestamp).getTime(),
-        },
+    case 'chat': {
+      const props: ChatCardShape['props'] = {
+        w: node.w,
+        h: node.h,
+        title: node.title,
+        messages: [],
+        summary: node.body,
+        createdAt: new Date(node.timestamp).getTime(),
       }
+      if (node.tags !== undefined) props.tags = node.tags
+      if (node.cardType !== undefined) props.cardType = node.cardType
+      return { ...base, type: 'chat-card', props }
+    }
     case 'ink-group': {
       const ink = node as InkGroupNode
       return {

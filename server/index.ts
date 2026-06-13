@@ -311,6 +311,22 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     res.json({ count })
   })
 
+  // GET /artifacts — list stored artifacts, optionally filtered by ?type=chat.
+  // Used by the canvas to load existing chat threads as Thread cards on mount.
+  app.get('/artifacts', requireAuth, (req: Request, res: Response) => {
+    const { type } = req.query as { type?: string }
+    const rows = typeof type === 'string' && type
+      ? db.prepare(
+          `SELECT id, type, title, content, created_at, updated_at
+           FROM artifacts WHERE type = ? ORDER BY created_at ASC`
+        ).all(type)
+      : db.prepare(
+          `SELECT id, type, title, content, created_at, updated_at
+           FROM artifacts ORDER BY created_at ASC`
+        ).all()
+    res.json(rows)
+  })
+
   // POST /linking/run — model-drawn links for one artifact (PEO-122)
   app.post('/linking/run', requireAuth, async (req: Request, res: Response) => {
     const { artifactId } = req.body as { artifactId?: string }

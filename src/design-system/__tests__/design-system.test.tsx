@@ -115,10 +115,14 @@ describe('Button', () => {
 })
 
 describe('CanvasFilterBar', () => {
-  it('renders All pill and every node-type pill', () => {
+  it('renders All plus the five canonical card-type pills and nothing else', () => {
     render(<CanvasFilterBar />)
-    for (const label of ['All', 'Project', 'Idea', 'Chat', 'Doc', 'Sketch', 'Agent', 'Skill', 'MCP', 'Gem']) {
+    for (const label of ['All', 'Project', 'Idea', 'Thread', 'Doc', 'Sketch']) {
       expect(screen.getByText(label)).toBeTruthy()
+    }
+    // Agent/Skill/MCP/Gem shapes still render but are not filter pills.
+    for (const label of ['Chat', 'Agent', 'Skill', 'MCP', 'Gem']) {
+      expect(screen.queryByText(label)).toBeNull()
     }
   })
 
@@ -137,7 +141,7 @@ describe('CanvasFilterBar', () => {
   })
 
   it('does not render any count badges on the pills', () => {
-    render(<CanvasFilterBar active={['chat', 'project']} />)
+    render(<CanvasFilterBar active={['thread', 'project']} />)
     expect(screen.queryByText(/\(\d+\)/)).toBeNull()
   })
 

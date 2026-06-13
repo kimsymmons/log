@@ -32,6 +32,10 @@ export interface ChatNode extends BaseNode {
   title: string
   body: string
   timestamp: string
+  /** User-assigned tags (drive connections + colour). Optional for back-compat. */
+  tags?: string[]
+  /** Card type glyph discriminator, e.g. 'thread'. Optional for back-compat. */
+  cardType?: string
 }
 
 export interface ArtifactNode extends BaseNode {
