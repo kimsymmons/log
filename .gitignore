@@ -2,3 +2,8 @@ node_modules/
 dist/
 .DS_Store
 .env
+.vercel
+.env*
+e2e/.auth/
+test-results/
+playwright-report/
