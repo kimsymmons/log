@@ -3,15 +3,18 @@ import { HTMLContainer } from 'tldraw'
 
 // ── Logical node-type filter keys ────────────────────────────────────────────
 //
-// These are the *logical* node types the filter bar exposes — distinct from
-// tldraw shape `type` strings. The mapping between the two lives in
-// `shapeLogicalType` below (e.g. a `chat-card` is either Project or Chat
-// depending on its tags).
+// These are the *logical* node types the filter system understands — distinct
+// from tldraw shape `type` strings. The mapping between the two lives in
+// `shapeLogicalType` below (e.g. a `chat-card` is either Project or Thread
+// depending on its tags). The filter *bar* only surfaces the five canonical
+// card types (Project · Idea · Thread · Doc · Sketch); the agent/skill/mcp/gem
+// shapes still render and still dim under an active filter, they just aren't
+// offered as filter pills.
 
 export type FilterKey =
   | 'project'
   | 'idea'
-  | 'chat'
+  | 'thread'
   | 'doc'
   | 'sketch'
   | 'agent'
@@ -28,12 +31,12 @@ export interface FilterShape {
 /**
  * Map a tldraw shape to its logical filter key, or null for shapes that aren't
  * filterable node types (frames, arrows, artifacts, …). A `chat-card` counts as
- * Project when tagged "project", otherwise Chat.
+ * Project when tagged "project", otherwise Thread.
  */
 export function shapeLogicalType(shape: FilterShape): FilterKey | null {
   if (shape.type === 'chat-card') {
     const tags = (shape.props?.tags ?? []) as string[]
-    return tags.includes('project') ? 'project' : 'chat'
+    return tags.includes('project') ? 'project' : 'thread'
   }
   switch (shape.type) {
     case 'musing': return 'idea'

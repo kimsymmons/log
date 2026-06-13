@@ -2,17 +2,18 @@ import React from 'react'
 import { Button } from './Button'
 import { TypeGlyph, typeGlyphMeta } from './TypeGlyph'
 
-/** Pill keys & order, matching the logical FilterKey set in FilterContext. */
+/**
+ * Pill keys & order — the five canonical card types per the design spec.
+ * Agent/Skill/MCP/Gem shapes still render and still dim under an active
+ * filter (see FilterContext.shapeLogicalType); they're just not offered as
+ * filter pills here.
+ */
 export const FILTER_PILLS: Array<{ key: string; label: string }> = [
   { key: 'project', label: 'Project' },
   { key: 'idea', label: 'Idea' },
-  { key: 'chat', label: 'Chat' },
+  { key: 'thread', label: 'Thread' },
   { key: 'doc', label: 'Doc' },
   { key: 'sketch', label: 'Sketch' },
-  { key: 'agent', label: 'Agent' },
-  { key: 'skill', label: 'Skill' },
-  { key: 'mcp', label: 'MCP' },
-  { key: 'gem', label: 'Gem' },
 ]
 
 interface CanvasFilterBarProps {
