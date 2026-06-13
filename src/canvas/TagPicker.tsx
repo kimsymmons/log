@@ -111,7 +111,7 @@ export function TagPicker({ anchor, current, onToggle, onCreate, onClose }: TagP
                 textAlign: 'left',
               }}
             >
-              <Icon name="tag" size={13} color={`var(--sticky-${d.color}-text)`} />
+              <Icon name={d.icon} size={13} color={`var(--sticky-${d.color}-text)`} />
               <span style={{ flex: 1 }}>{d.label}</span>
               {on && <Icon name="check" size={13} color="var(--accent-text)" />}
             </button>

@@ -2,7 +2,7 @@ import React from 'react'
 import { useEditor, useValue } from 'tldraw'
 import { TypeGlyph, typeGlyphMeta } from '../design-system/TypeGlyph'
 import { Tag } from '../design-system/Tag'
-import { tagColorFor } from './tagStore'
+import { tagColorFor, tagGlyphFor } from './tagStore'
 import { DEFAULT_CARD_TYPE, type ChatCardShape } from '../shapes/ChatCard'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -77,7 +77,7 @@ export function PropertiesPanel() {
         {tags.length > 0 ? (
           <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
             {tags.map((t) => (
-              <Tag key={t} label={t} icon="tag" color={tagColorFor(t)} style={{ height: 22 }} />
+              <Tag key={t} label={t} icon={tagGlyphFor(t)} color={tagColorFor(t)} style={{ height: 22 }} />
             ))}
           </span>
         ) : (

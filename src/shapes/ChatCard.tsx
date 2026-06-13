@@ -18,7 +18,7 @@ import { TypeGlyph } from '../design-system/TypeGlyph'
 import { Tag } from '../design-system/Tag'
 import { useTagFocus } from '../canvas/TagFocusContext'
 import { TagPicker } from '../canvas/TagPicker'
-import { ensureTag, tagColorFor } from '../canvas/tagStore'
+import { ensureTag, tagColorFor, tagGlyphFor } from '../canvas/tagStore'
 import { setPosition } from '../canvas/positionStore'
 import { Icon } from '../design-system/Icon'
 
@@ -361,7 +361,7 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
             <Tag
               key={t}
               label={t}
-              icon="tag"
+              icon={tagGlyphFor(t)}
               color={tagColorFor(t)}
               onRemove={() => toggleTag(t)}
               onMouseEnter={() => setHovered(t)}
