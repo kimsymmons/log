@@ -4,7 +4,6 @@ import React from 'react'
 import {
   shapeLogicalType,
   isShapeDimmed,
-  countByLogicalType,
   FilterProvider,
   useFilter,
   type FilterKey,
@@ -58,22 +57,6 @@ describe('isShapeDimmed', () => {
 
   it('never dims structural shapes even when a filter is active', () => {
     expect(isShapeDimmed(mk('frame'), new Set<FilterKey>(['chat']))).toBe(false)
-  })
-})
-
-describe('countByLogicalType', () => {
-  it('counts shapes per logical type', () => {
-    const counts = countByLogicalType([
-      mk('chat-card'),
-      mk('chat-card', ['project']),
-      mk('chat-card'),
-      mk('musing'),
-      mk('frame'),
-    ])
-    expect(counts.chat).toBe(2)
-    expect(counts.project).toBe(1)
-    expect(counts.idea).toBe(1)
-    expect(counts.gem).toBe(0)
   })
 })
 

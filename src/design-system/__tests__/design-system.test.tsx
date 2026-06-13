@@ -136,10 +136,19 @@ describe('CanvasFilterBar', () => {
     expect(onClear).toHaveBeenCalledOnce()
   })
 
-  it('renders count badges when counts are supplied', () => {
-    render(<CanvasFilterBar counts={{ chat: 3, project: 1 }} />)
-    expect(screen.getByText('(3)')).toBeTruthy()
-    expect(screen.getByText('(1)')).toBeTruthy()
+  it('does not render any count badges on the pills', () => {
+    render(<CanvasFilterBar active={['chat', 'project']} />)
+    expect(screen.queryByText(/\(\d+\)/)).toBeNull()
+  })
+
+  it('marks the active pill (and "All" when nothing is selected) as pressed', () => {
+    const { rerender } = render(<CanvasFilterBar />)
+    expect(screen.getByText('All').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText('Project').getAttribute('aria-pressed')).toBe('false')
+
+    rerender(<CanvasFilterBar active={['project']} />)
+    expect(screen.getByText('All').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByText('Project').getAttribute('aria-pressed')).toBe('true')
   })
 })
 
