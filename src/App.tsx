@@ -23,7 +23,7 @@ import { SkillShapeUtil, DEFAULT_SKILL_SIZE, type SkillShape } from './shapes/Sk
 import { McpServerShapeUtil, DEFAULT_MCP_SIZE, type McpServerShape } from './shapes/McpServerShape'
 import { GemShapeUtil, DEFAULT_GEM_SIZE, type GemShape } from './shapes/GemShape'
 import { AgentCardShapeUtil, DEFAULT_AGENT_CARD_SIZE, type AgentCardShape } from './shapes/AgentCardShape'
-import { parseConversations, conversationToCardSeed } from './lib/importChats'
+import { parseConversations, conversationToCardSeed, conversationSourceUrl } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
 import type { LogNode } from './model/nodes'
@@ -232,6 +232,7 @@ function MinimalToolbar() {
           type: 'chat',
           title: conv.title,
           content: JSON.stringify(conv.messages),
+          sourceUrl: conversationSourceUrl(conv),
           created_at: new Date(conv.created_at).getTime() || Date.now(),
         }))
       ),

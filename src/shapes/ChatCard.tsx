@@ -41,6 +41,7 @@ export type ChatCardShape = TLBaseShape<'chat-card', {
   createdAt: number
   tags?: string[]
   cardType?: string
+  sourceUrl?: string
 }>
 
 /** Default card type when a card carries none. Chat cards are threads. */
@@ -180,7 +181,7 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
     return () => window.removeEventListener('keydown', handler)
   }, [uiState, dispatch])
 
-  const { title, messages, summary, createdAt } = shape.props
+  const { title, messages, summary, createdAt, sourceUrl } = shape.props
   const cardType = shape.props.cardType ?? DEFAULT_CARD_TYPE
   const tags = shape.props.tags ?? []
   // Focus follows tags: when a tag chip is hovered, cards that don't carry
@@ -389,6 +390,23 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
           </button>
         </div>
 
+        {sourceUrl && (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: d.secondary ? 'none' : 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content',
+              fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', color: 'var(--text-3)', textDecoration: 'none',
+            }}
+          >
+            <Icon name="external-link" size={11} color="var(--text-3)" />
+            Open in Claude
+          </a>
+        )}
+
         {picker && (
           <TagPicker
             anchor={picker}
@@ -539,6 +557,7 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     createdAt: T.number,
     tags: T.optional(T.arrayOf(T.string)),
     cardType: T.optional(T.string),
+    sourceUrl: T.optional(T.string),
   }
 
   // Tracks artifact offsets at drag start so they can follow the parent

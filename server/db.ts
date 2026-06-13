@@ -79,6 +79,12 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     db.exec(`ALTER TABLE artifact_links ADD COLUMN rationale TEXT`)
   }
 
+  // Additive migration: sourceUrl on artifacts — link back to the source chat.
+  const artifactCols = db.pragma('table_info(artifacts)') as Array<{ name: string }>
+  if (!artifactCols.map(c => c.name).includes('sourceUrl')) {
+    db.exec(`ALTER TABLE artifacts ADD COLUMN sourceUrl TEXT`)
+  }
+
   // Schema migrations table — tracks which migrations have run (idempotent)
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (

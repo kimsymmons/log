@@ -17,6 +17,8 @@ export interface TagDef {
 
 interface TagState {
   defs: Record<string, TagDef>
+  /** Artifact ids that have already been auto-tagged (so we don't re-run). */
+  autoTagged?: string[]
 }
 
 export const TAGS_KEY = 'log-canvas-tags-v1'
@@ -60,11 +62,11 @@ export function nameToGlyph(name: string): string {
 function read(storage: Storage): TagState {
   try {
     const raw = storage.getItem(TAGS_KEY)
-    if (!raw) return { defs: {} }
+    if (!raw) return { defs: {}, autoTagged: [] }
     const parsed = JSON.parse(raw) as Partial<TagState>
-    return { defs: parsed.defs ?? {} }
+    return { defs: parsed.defs ?? {}, autoTagged: parsed.autoTagged ?? [] }
   } catch {
-    return { defs: {} }
+    return { defs: {}, autoTagged: [] }
   }
 }
 
@@ -97,4 +99,18 @@ export function tagColorFor(label: string, storage: Storage = localStorage): str
 /** The glyph for a tag — its persisted def icon, or one derived from the name. */
 export function tagGlyphFor(label: string, storage: Storage = localStorage): string {
   return read(storage).defs[tagId(label)]?.icon ?? nameToGlyph(label)
+}
+
+/** Whether this artifact has already had auto-tags generated. */
+export function wasAutoTagged(artifactId: string, storage: Storage = localStorage): boolean {
+  return (read(storage).autoTagged ?? []).includes(artifactId)
+}
+
+/** Record that an artifact has been auto-tagged so it won't be re-tagged. */
+export function markAutoTagged(artifactId: string, storage: Storage = localStorage): void {
+  const state = read(storage)
+  const set = new Set(state.autoTagged ?? [])
+  set.add(artifactId)
+  state.autoTagged = [...set]
+  write(storage, state)
 }

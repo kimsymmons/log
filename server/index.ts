@@ -290,7 +290,7 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
 
     const insert = db.prepare(
-      'INSERT INTO artifacts (id, type, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO artifacts (id, type, title, content, sourceUrl, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
 
     let count = 0
@@ -302,6 +302,7 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
         typeof item.type === 'string' ? item.type : 'chat',
         item.title,
         typeof item.content === 'string' ? item.content : '',
+        typeof item.sourceUrl === 'string' ? item.sourceUrl : null,
         typeof item.created_at === 'number' ? item.created_at : now,
         now
       )
@@ -317,11 +318,11 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     const { type } = req.query as { type?: string }
     const rows = typeof type === 'string' && type
       ? db.prepare(
-          `SELECT id, type, title, content, created_at, updated_at
+          `SELECT id, type, title, content, sourceUrl, created_at, updated_at
            FROM artifacts WHERE type = ? ORDER BY created_at ASC`
         ).all(type)
       : db.prepare(
-          `SELECT id, type, title, content, created_at, updated_at
+          `SELECT id, type, title, content, sourceUrl, created_at, updated_at
            FROM artifacts ORDER BY created_at ASC`
         ).all()
     res.json(rows)

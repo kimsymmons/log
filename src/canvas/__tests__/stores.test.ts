@@ -4,6 +4,8 @@ import {
   getTagDefs,
   tagColorFor,
   tagId,
+  wasAutoTagged,
+  markAutoTagged,
 } from '../tagStore'
 import { getPosition, setPosition } from '../positionStore'
 
@@ -50,6 +52,16 @@ describe('tagStore', () => {
 
   it('falls back to a derived colour for unknown labels', () => {
     expect(['yellow', 'green', 'blue', 'purple', 'pink', 'gray']).toContain(tagColorFor('never-seen', s))
+  })
+
+  it('tracks which artifacts have been auto-tagged', () => {
+    expect(wasAutoTagged('art-1', s)).toBe(false)
+    markAutoTagged('art-1', s)
+    expect(wasAutoTagged('art-1', s)).toBe(true)
+    expect(wasAutoTagged('art-2', s)).toBe(false)
+    // idempotent
+    markAutoTagged('art-1', s)
+    expect(wasAutoTagged('art-1', s)).toBe(true)
   })
 })
 
