@@ -9,13 +9,13 @@ test.beforeEach(async ({ page }) => {
 
 test('M key creates a Musing card at viewport centre', async ({ page }) => {
   await page.keyboard.press('m')
-  const card = page.locator('[data-shape-type="musing"]')
+  const card = page.locator('.tl-html-container[data-shape-type="musing"]')
   await expect(card).toHaveCount(1)
 })
 
 test('clicking text area opens textarea', async ({ page }) => {
   await page.keyboard.press('m')
-  const card = page.locator('[data-shape-type="musing"]')
+  const card = page.locator('.tl-html-container[data-shape-type="musing"]')
   await expect(card).toHaveCount(1)
   const textArea = card.locator('[data-musing-text]')
   await textArea.click()
@@ -24,7 +24,7 @@ test('clicking text area opens textarea', async ({ page }) => {
 
 test('typing in textarea persists text', async ({ page }) => {
   await page.keyboard.press('m')
-  const card = page.locator('[data-shape-type="musing"]')
+  const card = page.locator('.tl-html-container[data-shape-type="musing"]')
   await expect(card).toHaveCount(1)
   await card.locator('[data-musing-text]').click()
   const ta = card.locator('textarea')

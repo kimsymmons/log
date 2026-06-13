@@ -5,8 +5,13 @@ export const typeGlyphMeta: Record<string, { icon: string; label: string; color:
   project: { icon: 'box', label: 'Project', color: 'var(--type-project)' },
   idea:    { icon: 'lightbulb', label: 'Idea', color: 'var(--type-idea)' },
   thread:  { icon: 'messages-square', label: 'Thread', color: 'var(--type-thread)' },
+  chat:    { icon: 'messages-square', label: 'Chat', color: 'var(--type-chat)' },
   doc:     { icon: 'file-text', label: 'Doc', color: 'var(--type-doc)' },
   sketch:  { icon: 'pen-line', label: 'Sketch', color: 'var(--type-sketch)' },
+  agent:   { icon: 'bot', label: 'Agent', color: 'var(--type-agent)' },
+  skill:   { icon: 'wrench', label: 'Skill', color: 'var(--type-skill)' },
+  mcp:     { icon: 'plug', label: 'MCP', color: 'var(--type-mcp)' },
+  gem:     { icon: 'gem', label: 'Gem', color: 'var(--type-gem)' },
 }
 
 interface TypeGlyphProps {

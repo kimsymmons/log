@@ -1,10 +1,10 @@
 import React from 'react'
 import {
   BaseBoxShapeUtil,
-  HTMLContainer,
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { FilterDimContainer } from '../canvas/FilterContext'
 import { Tag } from '../design-system/Tag'
 import { Icon } from '../design-system/Icon'
 import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
@@ -125,12 +125,9 @@ export class GemShapeUtil extends BaseBoxShapeUtil<GemShape> {
 
   component(shape: GemShape) {
     return (
-      <HTMLContainer
-        data-shape-type="gem"
-        style={{ pointerEvents: 'all' }}
-      >
+      <FilterDimContainer shape={shape} dataShapeType="gem">
         <GemInner shape={shape} />
-      </HTMLContainer>
+      </FilterDimContainer>
     )
   }
 

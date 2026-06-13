@@ -1,10 +1,10 @@
 import React from 'react'
 import {
   BaseBoxShapeUtil,
-  HTMLContainer,
   T,
   type TLBaseShape,
 } from 'tldraw'
+import { FilterDimContainer } from '../canvas/FilterContext'
 import { Tag } from '../design-system/Tag'
 import { Icon } from '../design-system/Icon'
 import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
@@ -196,12 +196,9 @@ export class McpServerShapeUtil extends BaseBoxShapeUtil<McpServerShape> {
 
   component(shape: McpServerShape) {
     return (
-      <HTMLContainer
-        data-shape-type="mcp-server"
-        style={{ pointerEvents: 'all' }}
-      >
+      <FilterDimContainer shape={shape} dataShapeType="mcp-server">
         <McpServerInner shape={shape} />
-      </HTMLContainer>
+      </FilterDimContainer>
     )
   }
 
