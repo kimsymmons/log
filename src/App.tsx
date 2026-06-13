@@ -34,6 +34,9 @@ import { ConnectionLines } from './components/ConnectionLines'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
 import { FilterProvider } from './canvas/FilterContext'
 import { FilterBarMount } from './canvas/FilterBarMount'
+import { ChatPanelProvider } from './canvas/ChatPanelContext'
+import { ChatContextMenu } from './canvas/ChatContextMenu'
+import { ChatPanel } from './components/ChatPanel'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -778,28 +781,32 @@ export default function App() {
     InFrontOfTheCanvas: CanvasOverlays,
     Toolbar: MinimalToolbar,
     TopPanel: FilterBarMount,
+    ContextMenu: ChatContextMenu,
     PageMenu: null,
   }), [])
 
   const options = React.useMemo(() => ({ maxPages: 1 }), [])
 
   return (
-    <CommandPaletteContext.Provider value={paletteCtx}>
-      <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
-        <FilterProvider>
-          <div style={{ position: 'fixed', inset: 0 }}>
-            <Tldraw
-              shapeUtils={shapeUtils}
-              onMount={(editor) => {
-                window.__tldrawEditor = editor
-                return setupPersistence(editor)
-              }}
-              components={components}
-              options={options}
-            />
-          </div>
-        </FilterProvider>
-      </InkContext.Provider>
-    </CommandPaletteContext.Provider>
+    <ChatPanelProvider>
+      <CommandPaletteContext.Provider value={paletteCtx}>
+        <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
+          <FilterProvider>
+            <div style={{ position: 'fixed', inset: 0 }}>
+              <Tldraw
+                shapeUtils={shapeUtils}
+                onMount={(editor) => {
+                  window.__tldrawEditor = editor
+                  return setupPersistence(editor)
+                }}
+                components={components}
+                options={options}
+              />
+            </div>
+          </FilterProvider>
+        </InkContext.Provider>
+      </CommandPaletteContext.Provider>
+      <ChatPanel />
+    </ChatPanelProvider>
   )
 }
