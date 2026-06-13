@@ -19,19 +19,6 @@ export type FilterKey =
   | 'mcp'
   | 'gem'
 
-/** Order shown in the filter bar (after the leading "All" pill). */
-export const FILTER_KEYS: FilterKey[] = [
-  'project',
-  'idea',
-  'chat',
-  'doc',
-  'sketch',
-  'agent',
-  'skill',
-  'mcp',
-  'gem',
-]
-
 /** Minimal shape view the filter logic needs — keeps these pure & testable. */
 export interface FilterShape {
   type: string
@@ -69,16 +56,6 @@ export function isShapeDimmed(shape: FilterShape, activeTypes: Set<FilterKey>): 
   const lt = shapeLogicalType(shape)
   if (lt === null) return false
   return !activeTypes.has(lt)
-}
-
-/** Count shapes by logical type — drives the per-pill count badges. */
-export function countByLogicalType(shapes: FilterShape[]): Record<FilterKey, number> {
-  const counts = Object.fromEntries(FILTER_KEYS.map(k => [k, 0])) as Record<FilterKey, number>
-  for (const shape of shapes) {
-    const lt = shapeLogicalType(shape)
-    if (lt !== null) counts[lt] += 1
-  }
-  return counts
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
