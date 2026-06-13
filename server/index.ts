@@ -154,6 +154,22 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     res.json({ email: user.email })
   })
 
+  // POST /auth/test-token — test-only auth bypass for the Playwright visual harness.
+  // Disabled unless TEST_BYPASS_TOKEN is set; requires a matching X-Test-Token header.
+  // Issues a real JWT for a fixed test identity so E2E specs can seed localStorage.auth_token.
+  app.post('/auth/test-token', (req: Request, res: Response) => {
+    const expected = process.env.TEST_BYPASS_TOKEN
+    if (!expected) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    if (req.headers['x-test-token'] !== expected) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    res.json({ token: signToken('test@log.local') })
+  })
+
   // POST /inference — SSE streaming proxy to Anthropic
   app.post('/inference', requireAuth, async (req: Request, res: Response) => {
     const {
