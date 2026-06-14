@@ -34,6 +34,7 @@ import { TagFocusProvider } from './canvas/TagFocusContext'
 import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
 import { useThreadLoader } from './hooks/useThreadLoader'
+import { useProjectLoader } from './hooks/useProjectLoader'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -619,6 +620,7 @@ function CanvasOverlays() {
   const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
   useClusteringLayout(editor)
   useThreadLoader(editor)
+  useProjectLoader(editor)
   return (
     <>
       <TagConnectionOverlay />

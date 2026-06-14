@@ -42,10 +42,28 @@ export type ChatCardShape = TLBaseShape<'chat-card', {
   tags?: string[]
   cardType?: string
   sourceUrl?: string
+  // Project-card fields (cardType === 'project'); see entity-schema.ts.
+  status?: string
+  statusColor?: string
+  issueCount?: number
+  targetDate?: string
 }>
 
 /** Default card type when a card carries none. Chat cards are threads. */
 export const DEFAULT_CARD_TYPE = 'thread'
+
+/** Project meta line: "N issues · MMM DD" (either part optional). */
+export function projectMetaLabel(issueCount?: number, targetDate?: string): string {
+  const parts: string[] = []
+  if (typeof issueCount === 'number') parts.push(`${issueCount} issue${issueCount === 1 ? '' : 's'}`)
+  if (targetDate) {
+    const d = new Date(targetDate)
+    if (!Number.isNaN(d.getTime())) {
+      parts.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }))
+    }
+  }
+  return parts.join(' · ')
+}
 
 /** Short, type-appropriate metadata line shown beneath the summary. */
 export function cardMetaLabel(cardType: string, messageCount: number, summary: string): string {
@@ -149,10 +167,10 @@ export function shortRelativeTime(ts: number): string {
   return `${Math.floor(hrs / 24)}d`
 }
 
-/** The stable artifact id behind a loaded Thread card, or the raw shape id. */
+/** The stable artifact id behind a loaded card (thread/project/…), or raw id. */
 export function artifactIdForShape(shapeId: string): string {
-  const prefix = 'shape:thread-'
-  return shapeId.startsWith(prefix) ? shapeId.slice(prefix.length) : shapeId
+  const m = /^shape:(?:thread|project)-(.+)$/.exec(shapeId)
+  return m ? m[1] : shapeId
 }
 
 // ── Inner component ────────────────────────────────────────────────────────
@@ -181,8 +199,9 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
     return () => window.removeEventListener('keydown', handler)
   }, [uiState, dispatch])
 
-  const { title, messages, summary, createdAt, sourceUrl } = shape.props
+  const { title, messages, summary, createdAt, sourceUrl, status, statusColor, issueCount, targetDate } = shape.props
   const cardType = shape.props.cardType ?? DEFAULT_CARD_TYPE
+  const sourceLabel = sourceUrl?.includes('linear.app') ? 'Open in Linear' : 'Open in Claude'
   const tags = shape.props.tags ?? []
   // Focus follows tags: when a tag chip is hovered, cards that don't carry
   // that tag fade so the hovered tag's network stands out. (Type filtering is
@@ -350,8 +369,23 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
           </div>
         )}
 
+        {cardType === 'project' && status && (
+          <div
+            style={{
+              display: d.secondary ? 'none' : 'inline-flex', alignItems: 'center', gap: 6, width: 'fit-content',
+              height: 20, padding: '0 8px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-2)',
+              fontFamily: 'var(--font-ui)', fontSize: 'var(--text-xs)', color: 'var(--text-2)',
+            }}
+          >
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor || 'var(--text-3)', flexShrink: 0 }} />
+            {status}
+          </div>
+        )}
+
         <div style={{ display: d.secondary ?? 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums' }}>
-          {cardMetaLabel(cardType, messages.length, summary)} · {shortRelativeTime(createdAt)}
+          {cardType === 'project'
+            ? projectMetaLabel(issueCount, targetDate)
+            : `${cardMetaLabel(cardType, messages.length, summary)} · ${shortRelativeTime(createdAt)}`}
         </div>
 
         <div
@@ -403,7 +437,7 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
             }}
           >
             <Icon name="external-link" size={11} color="var(--text-3)" />
-            Open in Claude
+            {sourceLabel}
           </a>
         )}
 
@@ -558,6 +592,10 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     tags: T.optional(T.arrayOf(T.string)),
     cardType: T.optional(T.string),
     sourceUrl: T.optional(T.string),
+    status: T.optional(T.string),
+    statusColor: T.optional(T.string),
+    issueCount: T.optional(T.number),
+    targetDate: T.optional(T.string),
   }
 
   // Tracks artifact offsets at drag start so they can follow the parent
