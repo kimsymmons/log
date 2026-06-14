@@ -30,11 +30,14 @@ export interface FilterShape {
 
 /**
  * Map a tldraw shape to its logical filter key, or null for shapes that aren't
- * filterable node types (frames, arrows, artifacts, …). A `chat-card` counts as
- * Project when tagged "project", otherwise Thread.
+ * filterable node types (frames, arrows, artifacts, …). A `chat-card` carries a
+ * `cardType` (idea/doc/sketch/…); a plain chat card counts as Project when
+ * tagged "project", otherwise Thread.
  */
 export function shapeLogicalType(shape: FilterShape): FilterKey | null {
   if (shape.type === 'chat-card') {
+    const cardType = typeof shape.props?.cardType === 'string' ? shape.props.cardType : undefined
+    if (cardType === 'idea' || cardType === 'project' || cardType === 'doc' || cardType === 'sketch') return cardType
     const tags = (shape.props?.tags ?? []) as string[]
     return tags.includes('project') ? 'project' : 'thread'
   }

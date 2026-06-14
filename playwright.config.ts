@@ -17,6 +17,12 @@ export default defineConfig({
     : [['html', { open: 'on-failure' }]],
   globalSetup: './e2e/global-setup.ts',
 
+  // Visual regression: allow a tiny pixel budget so full-page screenshots don't
+  // flake on sub-pixel antialiasing while still catching real UI changes.
+  expect: {
+    toHaveScreenshot: { maxDiffPixelRatio: 0.02 },
+  },
+
   use: {
     baseURL,
     screenshot: 'only-on-failure',

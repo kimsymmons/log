@@ -8,7 +8,11 @@ test.describe('thread cards', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/ink/strokes', (r) => r.fulfill({ json: [] }))
     await page.route('**/links**', (r) => r.fulfill({ json: [] }))
-    await page.route('**/artifacts**', (r) =>
+    await page.route('**/artifacts**', (r) => {
+      if (!r.request().url().includes('type=chat')) {
+        r.fulfill({ json: [] })
+        return
+      }
       r.fulfill({
         json: [
           {
@@ -26,8 +30,8 @@ test.describe('thread cards', () => {
             content: msgs(['how do tags link?', 'shared tag => connection']),
           },
         ],
-      }),
-    )
+      })
+    })
     await page.goto('/')
     await page.waitForFunction(() => (window as unknown as { __tldrawEditor?: unknown }).__tldrawEditor != null)
   })

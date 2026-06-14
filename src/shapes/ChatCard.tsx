@@ -149,10 +149,10 @@ export function shortRelativeTime(ts: number): string {
   return `${Math.floor(hrs / 24)}d`
 }
 
-/** The stable artifact id behind a loaded Thread card, or the raw shape id. */
+/** The stable artifact id behind a loaded card (thread/idea/…), or the raw id. */
 export function artifactIdForShape(shapeId: string): string {
-  const prefix = 'shape:thread-'
-  return shapeId.startsWith(prefix) ? shapeId.slice(prefix.length) : shapeId
+  const m = /^shape:(?:thread|idea)-(.+)$/.exec(shapeId)
+  return m ? m[1] : shapeId
 }
 
 // ── Inner component ────────────────────────────────────────────────────────

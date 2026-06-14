@@ -12,6 +12,9 @@ import { test, expect, type Page } from '@playwright/test'
 async function waitForCanvas(page: Page): Promise<void> {
   await expect(page.locator('.tl-canvas')).toBeVisible({ timeout: 20_000 })
   await page.waitForFunction(() => Boolean((window as unknown as { __tldrawEditor?: unknown }).__tldrawEditor), { timeout: 20_000 })
+  await page.waitForFunction(() => Boolean((window as unknown as { lucide?: { icons?: unknown } }).lucide?.icons), { timeout: 20_000 })
+  await page.evaluate(() => (document as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready)
+  await page.waitForTimeout(250)
 }
 
 async function setZoom(page: Page, z: number): Promise<void> {

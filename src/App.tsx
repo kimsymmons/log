@@ -1,6 +1,6 @@
 import 'tldraw/tldraw.css'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Button, CanvasToolbar, CanvasFilterBar, IconButton, ToolButton, Icon } from './design-system'
+import { CanvasFilterBar, IconButton, ToolButton, Icon } from './design-system'
 import {
   Tldraw,
   useEditor,
@@ -33,7 +33,7 @@ import { FilterProvider, useFilter, type FilterKey } from './canvas/FilterContex
 import { TagFocusProvider } from './canvas/TagFocusContext'
 import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
-import { useThreadLoader } from './hooks/useThreadLoader'
+import { useThreadLoader, useIdeaLoader } from './hooks/useThreadLoader'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -166,9 +166,21 @@ function CustomToolbar() {
   const editor = useEditor()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const { inkActive, eraserActive, setInkActive, setEraserActive } = React.useContext(InkContext)
-  const { registerImport, registerGroupClusters } = React.useContext(CommandPaletteContext)
+  const { inkActive, setInkActive } = React.useContext(InkContext)
+  const { registerImport, registerGroupClusters, setOpen: setPaletteOpen } = React.useContext(CommandPaletteContext)
   const currentTool = useValue('current tool', () => editor.getCurrentToolId(), [editor])
+
+  const createChatCard = useCallback(() => {
+    const vp = editor.getViewportPageBounds()
+    editor.createShape<ChatCardShape>({
+      type: 'chat-card',
+      x: vp.midX - COLLAPSED_SIZE.w / 2,
+      y: vp.midY - COLLAPSED_SIZE.h / 2,
+      props: { w: COLLAPSED_SIZE.w, h: COLLAPSED_SIZE.h, title: 'New chat', messages: [], summary: '', createdAt: Date.now() },
+    })
+  }, [editor])
+
+  const pickTool = useCallback((tool: string) => { setInkActive(false); editor.setCurrentTool(tool) }, [editor, setInkActive])
 
   const handleInkToggle = useCallback(() => {
     const next = !inkActive
@@ -318,24 +330,31 @@ function CustomToolbar() {
   return (
     <>
       <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={e => { void handleImport(e) }} />
-      <div data-testid="canvas-toolbar" style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all' }}>
-        <CanvasToolbar
-          variant="elevated"
-          value={inkActive ? 'draw' : currentTool}
-          onChange={(v) => { if (inkActive) setInkActive(false); editor.setCurrentTool(v) }}
-          groups={[[
-            { value: 'select', icon: 'mouse-pointer-2', label: 'Select', keys: 'V' },
-            { value: 'hand', icon: 'hand', label: 'Hand', keys: 'H' },
-          ]]}
-          trailing={
-            <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
-              <ToolButton icon="pen-line" label="Ink" keys="I" active={inkActive} onClick={handleInkToggle} />
-              {inkActive && <ToolButton icon="eraser" label="Erase" active={eraserActive} onClick={() => setEraserActive(!eraserActive)} />}
-              <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="secondary" icon="download">Import</Button>
-              <Button onClick={() => { void handleGroupClusters() }} size="sm" variant="secondary" icon="boxes">Group</Button>
-            </span>
-          }
-        />
+      {/* Custom toolbar — exactly the design-spec tools, in order. Surface:
+          --bg-raised / --border-1 / --shadow-floating / --radius-4. The active
+          tool's icon gets an --accent background (via ToolButton). Import /
+          Group clusters live in the command palette (⌘K). */}
+      <div
+        data-testid="canvas-toolbar"
+        role="toolbar"
+        aria-label="Canvas tools"
+        style={{
+          position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all',
+          display: 'inline-flex', alignItems: 'center', gap: 2, padding: 4,
+          background: 'var(--bg-raised)', border: '1px solid var(--border-1)',
+          boxShadow: 'var(--shadow-floating)', borderRadius: 'var(--radius-4)',
+        }}
+      >
+        <ToolButton icon="mouse-pointer-2" label="Select" keys="V" active={!inkActive && currentTool === 'select'} onClick={() => pickTool('select')} />
+        <ToolButton icon="hand" label="Pan" keys="H" active={currentTool === 'hand'} onClick={() => pickTool('hand')} />
+        <ToolButton icon="pencil" label="Pen" keys="I" active={inkActive} onClick={handleInkToggle} />
+        <ToolButton icon="square" label="Rectangle" keys="R" active={currentTool === 'geo'} onClick={() => pickTool('geo')} />
+        <ToolButton icon="diamond" label="Tag" active={false} onClick={() => { /* tag node — placeholder */ }} />
+        <ToolButton icon="file-text" label="Doc" active={false} onClick={() => { /* doc node — placeholder */ }} />
+        <ToolButton icon="type" label="Text" keys="T" active={currentTool === 'text'} onClick={() => pickTool('text')} />
+        <ToolButton icon="mic" label="Mic" active={false} onClick={() => { /* voice note — placeholder */ }} />
+        <ToolButton icon="message-circle" label="Chat" active={false} onClick={createChatCard} />
+        <ToolButton icon="plus" label="New" active={false} onClick={() => setPaletteOpen(true)} />
       </div>
       {toast && (
         <div
@@ -619,6 +638,7 @@ function CanvasOverlays() {
   const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
   useClusteringLayout(editor)
   useThreadLoader(editor)
+  useIdeaLoader(editor)
   return (
     <>
       <TagConnectionOverlay />

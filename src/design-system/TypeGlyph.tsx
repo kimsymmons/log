@@ -3,7 +3,7 @@ import { Icon } from './Icon'
 
 export const typeGlyphMeta: Record<string, { icon: string; label: string; color: string }> = {
   project: { icon: 'box', label: 'Project', color: 'var(--type-project)' },
-  idea:    { icon: 'lightbulb', label: 'Idea', color: 'var(--type-idea)' },
+  idea:    { icon: 'lightbulb', label: 'Idea', color: 'var(--yellow)' },
   thread:  { icon: 'messages-square', label: 'Thread', color: 'var(--green)' },
   chat:    { icon: 'messages-square', label: 'Chat', color: 'var(--green)' },
   doc:     { icon: 'file-text', label: 'Doc', color: 'var(--type-doc)' },
