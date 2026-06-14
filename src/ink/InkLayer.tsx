@@ -83,7 +83,8 @@ function renderAll(
   canvas: HTMLCanvasElement,
   completed: Stroke[],
   active: Point[],
-  camera: { x: number; y: number; z: number }
+  camera: { x: number; y: number; z: number },
+  activeStyle: { color: string; width: number } = { color: INK_COLOR, width: BASE_WIDTH }
 ) {
   const ctx = canvas.getContext('2d', { desynchronized: true })
   if (!ctx) return
@@ -98,14 +99,22 @@ function renderAll(
     const activeStroke: Stroke = {
       id: '__active__',
       points: active,
-      color: INK_COLOR,
-      width: BASE_WIDTH,
+      color: activeStyle.color,
+      width: activeStyle.width,
       canvasX: active[0].x,
       canvasY: active[0].y,
       zoom: camera.z,
     }
     drawStroke(ctx, activeStroke, camera)
   }
+}
+
+/** Convert a `#rrggbb` colour to an rgba() string for translucent highlighter ink. */
+function withAlpha(color: string, alpha: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(color.trim())
+  if (!m) return color
+  const n = parseInt(m[1], 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -152,9 +161,15 @@ interface InkLayerProps {
   eraserActive: boolean
   strokes: Stroke[]
   onStrokesChange: (strokes: Stroke[]) => void
+  /** Concrete colour for new strokes (resolved from a token). */
+  color?: string
+  /** Base stroke width in page units. */
+  width?: number
+  /** Highlighter mode — translucent + wider. */
+  highlighter?: boolean
 }
 
-export function InkLayer({ active, eraserActive, strokes, onStrokesChange }: InkLayerProps) {
+export function InkLayer({ active, eraserActive, strokes, onStrokesChange, color, width, highlighter = false }: InkLayerProps) {
   const editor = useEditor()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activePointsRef = useRef<Point[]>([])
@@ -164,6 +179,15 @@ export function InkLayer({ active, eraserActive, strokes, onStrokesChange }: Ink
   // Keep strokesRef in sync without causing render loops
   strokesRef.current = strokes
 
+  // Live style for new strokes. Highlighter ink is translucent and ~2.4× wider.
+  const baseColor = color || INK_COLOR
+  const baseWidth = width || BASE_WIDTH
+  const styleRef = useRef<{ color: string; width: number }>({ color: baseColor, width: baseWidth })
+  styleRef.current = {
+    color: highlighter ? withAlpha(baseColor, 0.4) : baseColor,
+    width: highlighter ? baseWidth * 2.4 : baseWidth,
+  }
+
   const scheduleRender = useCallback(() => {
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
@@ -171,7 +195,7 @@ export function InkLayer({ active, eraserActive, strokes, onStrokesChange }: Ink
       const canvas = canvasRef.current
       if (!canvas) return
       const camera = editor.getCamera()
-      renderAll(canvas, strokesRef.current, activePointsRef.current, camera)
+      renderAll(canvas, strokesRef.current, activePointsRef.current, camera, styleRef.current)
     })
   }, [editor])
 
@@ -259,8 +283,8 @@ export function InkLayer({ active, eraserActive, strokes, onStrokesChange }: Ink
     const stroke: Stroke = {
       id: crypto.randomUUID(),
       points: pts,
-      color: INK_COLOR,
-      width: BASE_WIDTH,
+      color: styleRef.current.color,
+      width: styleRef.current.width,
       canvasX: pts[0].x,
       canvasY: pts[0].y,
       zoom: camera.z,
