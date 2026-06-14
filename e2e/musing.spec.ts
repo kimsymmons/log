@@ -2,7 +2,7 @@ import { test, expect } from 'playwright/test'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-  await page.waitForSelector('.tlui-menu-zone', { timeout: 15_000 })
+  await page.waitForSelector('.tl-canvas', { timeout: 15_000 })
   // Clear any existing shapes so M shortcut doesn't conflict
   await page.keyboard.press('Escape')
 })

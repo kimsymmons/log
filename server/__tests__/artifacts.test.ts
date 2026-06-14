@@ -76,4 +76,22 @@ describe('GET /artifacts', () => {
     expect(res.status).toBe(200)
     expect(res.body).toEqual([])
   })
+
+  it('round-trips sourceUrl through import and listing', async () => {
+    await request(app)
+      .post('/import/chats')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send([
+        { type: 'chat', title: 'With URL', content: '[]', sourceUrl: 'https://claude.ai/chat/abc-123', created_at: 1700000000000 },
+        { type: 'chat', title: 'No URL', content: '[]', created_at: 1700000001000 },
+      ])
+    const res = await request(app)
+      .get('/artifacts?type=chat')
+      .set('Authorization', `Bearer ${authToken}`)
+    const byTitle = Object.fromEntries(
+      (res.body as Array<{ title: string; sourceUrl: string | null }>).map((r) => [r.title, r.sourceUrl]),
+    )
+    expect(byTitle['With URL']).toBe('https://claude.ai/chat/abc-123')
+    expect(byTitle['No URL']).toBeNull()
+  })
 })

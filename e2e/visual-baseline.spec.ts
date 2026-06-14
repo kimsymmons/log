@@ -1,93 +1,78 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * Visual regression baselines for the canvas, run against BASE_URL (local dev by
- * default, or the live Vercel deployment via BASE_URL=https://…).
+ * Visual regression baselines for the canvas chrome, run against BASE_URL
+ * (local dev by default). These assert the app stays visually consistent with
+ * itself — the references were captured after the chrome redesign was confirmed
+ * correct, NOT generated from the design HTML.
  *
- * Generate / refresh baselines with:
- *   npx playwright test e2e/visual-baseline.spec.ts --update-snapshots
+ * Refresh after an intentional UI change:
+ *   BASE_URL=http://localhost:5173 npx playwright test e2e/visual-baseline.spec.ts --update-snapshots
  */
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-
-function readTestToken(): string {
-  try {
-    const raw = readFileSync(join(__dirname, '.auth', 'token.json'), 'utf8')
-    return (JSON.parse(raw) as { token?: string }).token ?? ''
-  } catch {
-    return ''
-  }
-}
-
-const TEST_TOKEN = readTestToken()
-
-// Wait until tldraw has mounted and exposed the editor, then settle.
 async function waitForCanvas(page: Page): Promise<void> {
   await expect(page.locator('.tl-canvas')).toBeVisible({ timeout: 20_000 })
-  await page.waitForFunction(() => Boolean((window as unknown as { __tldrawEditor?: unknown }).__tldrawEditor), {
-    timeout: 20_000,
-  })
+  await page.waitForFunction(() => Boolean((window as unknown as { __tldrawEditor?: unknown }).__tldrawEditor), { timeout: 20_000 })
 }
 
-// Set zoom to an exact level, centred, so screenshots are deterministic.
-async function setZoom(page: Page, zoom: number): Promise<void> {
-  await page.evaluate((z) => {
-    const editor = (window as unknown as { __tldrawEditor: { resetZoom: () => void; setCamera: (c: { x: number; y: number; z: number }, o?: { immediate?: boolean }) => void } }).__tldrawEditor
-    editor.setCamera({ x: 0, y: 0, z: z }, { immediate: true })
-  }, zoom)
+async function setZoom(page: Page, z: number): Promise<void> {
+  await page.evaluate((zoom) => {
+    const ed = (window as unknown as { __tldrawEditor: { setCamera: (c: { x: number; y: number; z: number }, o?: { immediate?: boolean }) => void } }).__tldrawEditor
+    ed.setCamera({ x: 0, y: 0, z: zoom }, { immediate: true })
+  }, z)
+}
+
+// Seed two pinned thread cards at fixed positions so screenshots are
+// deterministic (meta.pinnedAt keeps the clustering layout from moving them).
+async function seedThreads(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const ed = (window as unknown as {
+      __tldrawEditor: { batch: (f: () => void) => void; createShape: (s: unknown) => void }
+    }).__tldrawEditor
+    const now = Date.now()
+    const mk = (id: string, x: number, title: string, summary: string, tags: string[]) =>
+      ed.createShape({
+        id: `shape:${id}`, type: 'chat-card', x, y: 120, meta: { pinnedAt: 9e15 },
+        props: {
+          w: 264, h: 200, title, summary, cardType: 'thread', tags,
+          messages: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }],
+          createdAt: now, sourceUrl: `https://claude.ai/chat/${id}`,
+        },
+      })
+    ed.batch(() => {
+      mk('vt-a', 80, 'Backlinks debate', 'Should we ship backlinks now? Backlinks feel risky for the current scope.', ['backlinks', 'debate'])
+      mk('vt-b', 440, 'Backlinks rollout', 'Plan the backlinks rollout carefully. Backlinks need a clean migration path.', ['backlinks', 'rollout'])
+    })
+  })
 }
 
 test.describe('visual baselines', () => {
   test.beforeEach(async ({ page }) => {
-    // Seed the auth JWT before any app code runs. The canvas renders without it,
-    // but this authenticates the app's background API calls when a token exists.
-    await page.addInitScript((token) => {
-      if (token) localStorage.setItem('auth_token', token)
-    }, TEST_TOKEN)
-
-    // Keep specs hermetic: no live backend dependency for the visuals under test.
+    await page.route('**/artifacts**', (route) => route.fulfill({ json: [] }))
     await page.route('**/ink/strokes', (route) => route.fulfill({ json: [] }))
     await page.route('**/links**', (route) => route.fulfill({ json: [] }))
-    await page.route('**/auth/me', (route) => route.fulfill({ json: { email: 'test@log.local' } }))
-
     await page.goto('/')
     await waitForCanvas(page)
     await setZoom(page, 1)
-    // Park the pointer off-canvas so the default screenshots have no hover state.
     await page.mouse.move(0, 0)
   })
 
-  test('empty canvas at 100% zoom', async ({ page }) => {
+  test('empty canvas', async ({ page }) => {
     await expect(page).toHaveScreenshot('canvas-empty.png', { animations: 'disabled' })
   })
 
-  test('canvas with a musing node', async ({ page }) => {
-    await page.locator('.tl-canvas').click({ position: { x: 640, y: 360 } })
-    await page.keyboard.press('m')
-    const card = page.locator('.tl-html-container[data-shape-type="musing"]')
-    await expect(card).toHaveCount(1)
+  test('canvas with thread cards', async ({ page }) => {
+    await seedThreads(page)
+    await page.waitForTimeout(500)
     await page.mouse.move(0, 0)
-    await expect(page).toHaveScreenshot('canvas-with-musing.png', { animations: 'disabled' })
+    await expect(page).toHaveScreenshot('canvas-threads.png', { animations: 'disabled' })
   })
 
-  test('canvas zoomed to ~50%', async ({ page }) => {
-    await page.locator('.tl-canvas').click({ position: { x: 640, y: 360 } })
-    await page.keyboard.press('m')
-    await expect(page.locator('.tl-html-container[data-shape-type="musing"]')).toHaveCount(1)
-    await setZoom(page, 0.5)
-    await page.mouse.move(0, 0)
-    await expect(page).toHaveScreenshot('canvas-zoom-minimal.png', { animations: 'disabled' })
+  test('filter bar', async ({ page }) => {
+    await expect(page.getByTestId('filter-bar')).toHaveScreenshot('filter-bar.png', { animations: 'disabled' })
   })
 
-  test('musing node hover state', async ({ page }) => {
-    await page.locator('.tl-canvas').click({ position: { x: 640, y: 360 } })
-    await page.keyboard.press('m')
-    const card = page.locator('.tl-html-container[data-shape-type="musing"]')
-    await expect(card).toHaveCount(1)
-    await card.hover()
-    await expect(page).toHaveScreenshot('canvas-hover-state.png', { animations: 'disabled' })
+  test('zoom pill', async ({ page }) => {
+    await expect(page.getByTestId('zoom-pill')).toHaveScreenshot('zoom-pill.png', { animations: 'disabled' })
   })
 })

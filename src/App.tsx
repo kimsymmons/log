@@ -1,11 +1,10 @@
 import 'tldraw/tldraw.css'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Button } from './design-system'
+import { Button, CanvasToolbar, CanvasFilterBar, IconButton, ToolButton, Icon } from './design-system'
 import {
   Tldraw,
   useEditor,
-  DefaultToolbar,
-  DefaultToolbarContent,
+  useValue,
   type Editor,
   type TLShapePartial,
   type TLFrameShape,
@@ -23,15 +22,14 @@ import { SkillShapeUtil, DEFAULT_SKILL_SIZE, type SkillShape } from './shapes/Sk
 import { McpServerShapeUtil, DEFAULT_MCP_SIZE, type McpServerShape } from './shapes/McpServerShape'
 import { GemShapeUtil, DEFAULT_GEM_SIZE, type GemShape } from './shapes/GemShape'
 import { AgentCardShapeUtil, DEFAULT_AGENT_CARD_SIZE, type AgentCardShape } from './shapes/AgentCardShape'
-import { parseConversations, conversationToCardSeed } from './lib/importChats'
+import { parseConversations, conversationToCardSeed, conversationSourceUrl } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
 import type { LogNode } from './model/nodes'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
-import { FilterProvider } from './canvas/FilterContext'
-import { FilterBarMount } from './canvas/FilterBarMount'
+import { FilterProvider, useFilter, type FilterKey } from './canvas/FilterContext'
 import { TagFocusProvider } from './canvas/TagFocusContext'
 import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
@@ -163,12 +161,14 @@ type ClusterSuggestion = {
   confidence: number
 }
 
-function MinimalToolbar() {
+// Custom floating toolbar (bottom-centre) — replaces tldraw's default toolbar.
+function CustomToolbar() {
   const editor = useEditor()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<string | null>(null)
   const { inkActive, eraserActive, setInkActive, setEraserActive } = React.useContext(InkContext)
   const { registerImport, registerGroupClusters } = React.useContext(CommandPaletteContext)
+  const currentTool = useValue('current tool', () => editor.getCurrentToolId(), [editor])
 
   const handleInkToggle = useCallback(() => {
     const next = !inkActive
@@ -232,6 +232,7 @@ function MinimalToolbar() {
           type: 'chat',
           title: conv.title,
           content: JSON.stringify(conv.messages),
+          sourceUrl: conversationSourceUrl(conv),
           created_at: new Date(conv.created_at).getTime() || Date.now(),
         }))
       ),
@@ -316,45 +317,31 @@ function MinimalToolbar() {
 
   return (
     <>
-      <DefaultToolbar>
-        <DefaultToolbarContent />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          style={{ display: 'none' }}
-          onChange={e => { void handleImport(e) }}
+      <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={e => { void handleImport(e) }} />
+      <div data-testid="canvas-toolbar" style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all' }}>
+        <CanvasToolbar
+          variant="elevated"
+          value={inkActive ? 'draw' : currentTool}
+          onChange={(v) => { if (inkActive) setInkActive(false); editor.setCurrentTool(v) }}
+          groups={[[
+            { value: 'select', icon: 'mouse-pointer-2', label: 'Select', keys: 'V' },
+            { value: 'hand', icon: 'hand', label: 'Hand', keys: 'H' },
+          ]]}
+          trailing={
+            <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+              <ToolButton icon="pen-line" label="Ink" keys="I" active={inkActive} onClick={handleInkToggle} />
+              {inkActive && <ToolButton icon="eraser" label="Erase" active={eraserActive} onClick={() => setEraserActive(!eraserActive)} />}
+              <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="secondary" icon="download">Import</Button>
+              <Button onClick={() => { void handleGroupClusters() }} size="sm" variant="secondary" icon="boxes">Group</Button>
+            </span>
+          }
         />
-        <Button onClick={() => fileInputRef.current?.click()} size="sm">
-          Import chats
-        </Button>
-        <Button onClick={() => { void handleGroupClusters() }} size="sm">
-          Group clusters
-        </Button>
-        <Button
-          onClick={handleInkToggle}
-          variant={inkActive ? 'primary' : 'secondary'}
-          size="sm"
-          icon="pen-line"
-        >
-          Ink
-        </Button>
-        {inkActive && (
-          <Button
-            onClick={() => setEraserActive(!eraserActive)}
-            variant={eraserActive ? 'danger' : 'secondary'}
-            size="sm"
-            icon="eraser"
-          >
-            Eraser
-          </Button>
-        )}
-      </DefaultToolbar>
+      </div>
       {toast && (
         <div
           style={{
-            position: 'fixed',
-            bottom: 20,
+            position: 'absolute',
+            bottom: 72,
             left: '50%',
             transform: 'translateX(-50%)',
             background: 'var(--bg-overlay)',
@@ -366,7 +353,7 @@ function MinimalToolbar() {
             fontSize: 'var(--text-sm)',
             fontFamily: 'var(--font-ui)',
             pointerEvents: 'none',
-            zIndex: 10000,
+            zIndex: 21,
           }}
         >
           {toast}
@@ -549,6 +536,84 @@ function CanvasBackground() {
   )
 }
 
+// 56px head nav — board-title pill + avatar. Lives in the app shell, above
+// the canvas panel.
+function NavBar() {
+  return (
+    <div
+      style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 56, zIndex: 30,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 16px', background: 'var(--bg-app)', pointerEvents: 'all',
+      }}
+    >
+      <div
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          height: 36, padding: '0 14px',
+          background: 'var(--bg-sidebar)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-4)',
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-1)',
+        }}
+      >
+        <Icon name="layout-grid" size={14} color="var(--text-3)" />
+        log canvas
+      </div>
+      <div
+        aria-label="Account"
+        style={{
+          width: 28, height: 28, borderRadius: 'var(--radius-pill)',
+          background: 'var(--accent)', color: 'var(--text-on-accent)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)',
+        }}
+      >
+        K
+      </div>
+    </div>
+  )
+}
+
+// Floating type filter — top-centre, 16px from top.
+function FilterBarOverlay() {
+  const { activeTypes, toggleType, clearTypes } = useFilter()
+  return (
+    <div data-testid="filter-bar" style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all' }}>
+      <CanvasFilterBar active={[...activeTypes]} onToggle={(k) => toggleType(k as FilterKey)} onClear={clearTypes} />
+    </div>
+  )
+}
+
+// Custom zoom pill — bottom-left, 16px. Mono / tabular-nums per the spec.
+function ZoomPill() {
+  const editor = useEditor()
+  const zoom = useValue('zoom', () => editor.getZoomLevel(), [editor])
+  return (
+    <div
+      data-testid="zoom-pill"
+      style={{
+        position: 'absolute', bottom: 16, left: 16, zIndex: 20, pointerEvents: 'all',
+        display: 'inline-flex', alignItems: 'center', gap: 2, padding: 2,
+        background: 'var(--bg-raised)', border: '1px solid var(--border-1)',
+        borderRadius: 'var(--radius-3)', boxShadow: 'var(--shadow-floating)',
+      }}
+    >
+      <IconButton icon="minus" label="Zoom out" size="sm" onClick={() => editor.zoomOut()} />
+      <button
+        type="button"
+        onClick={() => editor.resetZoom()}
+        aria-label="Reset zoom"
+        style={{
+          minWidth: 48, height: 24, padding: '0 6px', border: 'none', background: 'transparent', cursor: 'pointer',
+          fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <IconButton icon="plus" label="Zoom in" size="sm" onClick={() => editor.zoomIn()} />
+    </div>
+  )
+}
+
 function CanvasOverlays() {
   const editor = useEditor()
   const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
@@ -564,6 +629,9 @@ function CanvasOverlays() {
         strokes={strokes}
         onStrokesChange={setStrokes}
       />
+      <FilterBarOverlay />
+      <CustomToolbar />
+      <ZoomPill />
       <PropertiesPanel />
       <CommandPalette />
       <GlobalKeyboardShortcuts />
@@ -615,15 +683,26 @@ export default function App() {
     registerGroupClusters,
   }), [paletteOpen, paletteQuery, onImport, onGroupClusters, registerImport, registerGroupClusters])
 
+  // Custom chrome only: every default tldraw UI slot is nulled out. The dot-grid
+  // Background and the InFrontOfTheCanvas overlay layer (nav-less; the nav lives
+  // in the app shell) are the only slots we keep.
   const components = React.useMemo(() => ({
     InFrontOfTheCanvas: CanvasOverlays,
     Background: CanvasBackground,
-    Toolbar: MinimalToolbar,
-    TopPanel: FilterBarMount,
-    PageMenu: null,
-    // Custom shapes carry no tldraw styles; its StylePanel would only collide
-    // with the floating PropertiesPanel in the top-right.
+    Toolbar: null,
     StylePanel: null,
+    PageMenu: null,
+    MainMenu: null,
+    ZoomMenu: null,
+    HelpMenu: null,
+    NavigationPanel: null,
+    Minimap: null,
+    QuickActions: null,
+    ActionsMenu: null,
+    DebugMenu: null,
+    SharePanel: null,
+    MenuPanel: null,
+    TopPanel: null,
   }), [])
 
   const options = React.useMemo(() => ({ maxPages: 1 }), [])
@@ -633,13 +712,14 @@ export default function App() {
       <TagFocusProvider>
         <CommandPaletteContext.Provider value={paletteCtx}>
           <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
-            {/* App shell — deepest backdrop (P2) */}
-            <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)' }}>
-              {/* Canvas panel — inset, hairline-framed, dot-grid surface (P2) */}
+            {/* App shell — deepest backdrop */}
+            <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)', overflow: 'hidden' }}>
+              <NavBar />
+              {/* Canvas panel — inset below the 56px nav, hairline-framed, dot-grid surface */}
               <div
                 style={{
                   position: 'absolute',
-                  inset: '0 8px 8px',
+                  inset: '56px 8px 8px',
                   border: '1px solid var(--border-2)',
                   borderRadius: 'var(--radius-4)',
                   boxShadow: 'var(--shadow-canvas)',

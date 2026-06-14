@@ -45,8 +45,8 @@ export function PropertiesPanel() {
     <div
       style={{
         position: 'absolute',
-        top: 'var(--space-3)',
-        right: 'var(--space-3)',
+        top: 'var(--space-4)',
+        right: 'var(--space-4)',
         zIndex: 20,
         width: 248,
         display: 'flex',

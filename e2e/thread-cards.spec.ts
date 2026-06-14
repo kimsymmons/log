@@ -35,8 +35,8 @@ test.describe('thread cards', () => {
   test('loads stored chat threads as Thread cards with a reply/time meta', async ({ page }) => {
     await expect(page.getByText('Backlinks debate')).toBeVisible()
     await expect(page.getByText('Tagging model')).toBeVisible()
-    // last-message preview + reply count
-    await expect(page.getByText('strong no — scope risk.')).toBeVisible()
+    // first-two-sentences body (opening message) + reply count
+    await expect(page.getByText('ship backlinks?')).toBeVisible()
     await expect(page.getByText(/4 replies ·/)).toBeVisible()
     await expect(page.getByText(/2 replies ·/)).toBeVisible()
   })
