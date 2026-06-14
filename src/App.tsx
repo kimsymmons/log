@@ -35,6 +35,7 @@ import { CommandPalette, CommandPaletteContext } from './CommandPalette'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
 import { FilterProvider, useFilter, type FilterKey } from './canvas/FilterContext'
 import { TagFocusProvider } from './canvas/TagFocusContext'
+import { FocusProvider, useFocus } from './canvas/FocusContext'
 import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
 import { useThreadLoader } from './hooks/useThreadLoader'
@@ -476,6 +477,7 @@ import { InkContext } from './ink/InkContext'
 function GlobalKeyboardShortcuts() {
   const editor = useEditor()
   const { open: paletteOpen } = React.useContext(CommandPaletteContext)
+  const { clearFocus } = useFocus()
   // Tracks hold-space-to-pan: whether space is held and the tool to restore.
   const panRef = useRef<{ down: boolean; prev: string | null }>({ down: false, prev: null })
 
@@ -495,6 +497,7 @@ function GlobalKeyboardShortcuts() {
 
       switch (e.key) {
         case 'Escape':
+          clearFocus()
           editor.selectNone()
           break
         case 'Delete':
@@ -642,7 +645,7 @@ function GlobalKeyboardShortcuts() {
       window.removeEventListener('keydown', handler)
       window.removeEventListener('keyup', upHandler)
     }
-  }, [editor, paletteOpen])
+  }, [editor, paletteOpen, clearFocus])
 
   return null
 }
@@ -743,6 +746,22 @@ function ZoomPill() {
   )
 }
 
+// Exits orbit/focus mode when the canvas background is clicked (clicks that
+// fall through dimmed cards count as background too). Only listens while focused.
+function FocusController() {
+  const editor = useEditor()
+  const { focusActive, clearFocus } = useFocus()
+  useEffect(() => {
+    if (!focusActive) return
+    const handler = (info: { name?: string; target?: string }) => {
+      if (info.name === 'pointer_down' && info.target === 'canvas') clearFocus()
+    }
+    editor.on('event', handler)
+    return () => { editor.off('event', handler) }
+  }, [editor, focusActive, clearFocus])
+  return null
+}
+
 function CanvasOverlays() {
   const editor = useEditor()
   const { strokes, setStrokes } = React.useContext(InkContext)
@@ -750,6 +769,7 @@ function CanvasOverlays() {
   useThreadLoader(editor)
   return (
     <>
+      <FocusController />
       <TagConnectionOverlay />
       <TetherOverlay />
       {/* Legacy ink strokes render read-only; new ink uses tldraw's draw tool. */}
@@ -844,6 +864,7 @@ export default function App() {
   return (
     <FilterProvider>
       <TagFocusProvider>
+        <FocusProvider>
         <CommandPaletteContext.Provider value={paletteCtx}>
           <InkContext.Provider value={inkCtx}>
             {/* App shell — deepest backdrop */}
@@ -874,6 +895,7 @@ export default function App() {
             </div>
           </InkContext.Provider>
         </CommandPaletteContext.Provider>
+        </FocusProvider>
       </TagFocusProvider>
     </FilterProvider>
   )
