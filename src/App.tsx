@@ -5,9 +5,13 @@ import {
   Tldraw,
   useEditor,
   useValue,
+  DefaultColorStyle,
+  DefaultSizeStyle,
   type Editor,
   type TLShapePartial,
   type TLFrameShape,
+  type TLDefaultColorStyle,
+  type TLDefaultSizeStyle,
 } from 'tldraw'
 import { ChatCardShapeUtil, COLLAPSED_SIZE, type ChatCardShape } from './shapes/ChatCard'
 import {
@@ -161,20 +165,121 @@ type ClusterSuggestion = {
   confidence: number
 }
 
+// Shared floating-surface style for the toolbars (matches the design spec).
+const floatingSurface: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: 4,
+  borderRadius: 'var(--radius-4)', background: 'var(--bg-raised)',
+  border: '1px solid var(--border-1)', boxShadow: 'var(--shadow-floating)',
+}
+
+const ToolbarDivider = () => (
+  <span style={{ width: 1, height: 24, background: 'var(--border-1)', margin: '0 2px', flexShrink: 0 }} />
+)
+
+// Draw-family tool ids that show the ink sub-toolbar.
+const INK_TOOLS = ['draw', 'highlight', 'eraser']
+
+// Ink palette — maps each design swatch (a token, for display) to tldraw's
+// DefaultColorStyle value, so drawing uses native tldraw shapes/styles.
+const INK_COLORS: Array<{ name: string; value: TLDefaultColorStyle; swatch: string }> = [
+  { name: 'White', value: 'white', swatch: 'var(--text-1)' },
+  { name: 'Indigo', value: 'violet', swatch: 'var(--accent)' },
+  { name: 'Yellow', value: 'yellow', swatch: 'var(--yellow)' },
+  { name: 'Green', value: 'green', swatch: 'var(--green)' },
+  { name: 'Blue', value: 'light-blue', swatch: 'var(--blue)' },
+  { name: 'Lavender', value: 'light-violet', swatch: 'var(--purple)' },
+  { name: 'Pink', value: 'light-red', swatch: 'var(--sticky-pink-text)' },
+  { name: 'Red', value: 'red', swatch: 'var(--red)' },
+]
+const INK_WEIGHTS: Array<{ name: string; value: TLDefaultSizeStyle; dot: number }> = [
+  { name: 'Thin', value: 's', dot: 4 },
+  { name: 'Medium', value: 'm', dot: 7 },
+  { name: 'Thick', value: 'l', dot: 11 },
+]
+
+// Secondary ink toolbar — mounted only while a draw-family tool is active.
+// Drives tldraw's native draw / highlight / eraser tools and shared styles
+// (no custom canvas layer, so undo/redo + selection stay consistent).
+function InkSubToolbar() {
+  const editor = useEditor()
+  const toolId = useValue('ink tool', () => editor.getCurrentToolId(), [editor])
+  const styles = useValue('ink styles', () => editor.getInstanceState().stylesForNextShape as Record<string, unknown>, [editor])
+  const activeColor = styles?.[DefaultColorStyle.id]
+  const activeSize = styles?.[DefaultSizeStyle.id] ?? 'm'
+  return (
+    <div
+      data-testid="ink-subtoolbar"
+      role="toolbar"
+      aria-label="Ink tools"
+      style={{
+        position: 'absolute', bottom: 72, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 20, pointerEvents: 'all', ...floatingSurface,
+      }}
+    >
+      <ToolButton icon="pen-line" label="Pen" active={toolId === 'draw'} onClick={() => editor.setCurrentTool('draw')} />
+      <ToolButton icon="highlighter" label="Highlighter" active={toolId === 'highlight'} onClick={() => editor.setCurrentTool('highlight')} />
+      <ToolButton icon="eraser" label="Eraser" active={toolId === 'eraser'} onClick={() => editor.setCurrentTool('eraser')} />
+      <ToolbarDivider />
+      {INK_WEIGHTS.map((w) => {
+        const sel = activeSize === w.value
+        return (
+          <button
+            key={w.name} type="button" aria-label={`${w.name} weight`} aria-pressed={sel}
+            onClick={() => editor.setStyleForNextShapes(DefaultSizeStyle, w.value)}
+            style={{
+              width: 28, height: 28, border: 'none', borderRadius: 'var(--radius-2)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: sel ? 'var(--bg-app)' : 'transparent',
+              boxShadow: sel ? 'var(--shadow-inset), inset 0 0 0 1px var(--border-1)' : 'none',
+            }}
+          >
+            <span style={{ width: w.dot, height: w.dot, borderRadius: 'var(--radius-pill)', background: sel ? 'var(--text-1)' : 'var(--text-3)' }} />
+          </button>
+        )
+      })}
+      <ToolbarDivider />
+      {INK_COLORS.map((c) => {
+        const selected = activeColor === c.value
+        return (
+          <button
+            key={c.name} type="button" aria-label={c.name} aria-pressed={selected}
+            onClick={() => editor.setStyleForNextShapes(DefaultColorStyle, c.value)}
+            style={{
+              width: 24, height: 24, padding: 0, border: 'none', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent',
+              boxShadow: selected ? '0 0 0 2px var(--bg-raised), 0 0 0 3px var(--text-1)' : 'none',
+            }}
+          >
+            <span style={{ width: 16, height: 16, borderRadius: 'var(--radius-pill)', background: c.swatch, border: '1px solid var(--border-2)' }} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // Custom floating toolbar (bottom-centre) — replaces tldraw's default toolbar.
 function CustomToolbar() {
   const editor = useEditor()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const { inkActive, eraserActive, setInkActive, setEraserActive } = React.useContext(InkContext)
   const { registerImport, registerGroupClusters } = React.useContext(CommandPaletteContext)
   const currentTool = useValue('current tool', () => editor.getCurrentToolId(), [editor])
+  const inkToolActive = INK_TOOLS.includes(currentTool)
 
-  const handleInkToggle = useCallback(() => {
-    const next = !inkActive
-    setInkActive(next)
-    editor.setCurrentTool(next ? 'draw' : 'select')
-  }, [inkActive, setInkActive, editor])
+  const pickTool = useCallback((id: string) => { editor.setCurrentTool(id) }, [editor])
+  const isTool = (id: string) => currentTool === id
+
+  // Ink button toggles tldraw's native draw tool. Default to white ink so it's
+  // visible on the dark canvas; pen/colour/weight then live in the sub-toolbar.
+  const handleInk = useCallback(() => {
+    if (INK_TOOLS.includes(editor.getCurrentToolId())) { editor.setCurrentTool('select'); return }
+    editor.setStyleForNextShapes(DefaultColorStyle, 'white')
+    editor.setCurrentTool('draw')
+  }, [editor])
+  // Placeholder tools (Tag/Doc/Mic/Chat/Add) have no behaviour yet, but still
+  // dismiss the ink sub-toolbar like any other main-toolbar button.
+  const dismissInk = useCallback(() => { if (INK_TOOLS.includes(editor.getCurrentToolId())) editor.setCurrentTool('select') }, [editor])
 
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -318,24 +423,23 @@ function CustomToolbar() {
   return (
     <>
       <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={e => { void handleImport(e) }} />
+      {inkToolActive && <InkSubToolbar />}
       <div data-testid="canvas-toolbar" style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all' }}>
-        <CanvasToolbar
-          variant="elevated"
-          value={inkActive ? 'draw' : currentTool}
-          onChange={(v) => { if (inkActive) setInkActive(false); editor.setCurrentTool(v) }}
-          groups={[[
-            { value: 'select', icon: 'mouse-pointer-2', label: 'Select', keys: 'V' },
-            { value: 'hand', icon: 'hand', label: 'Hand', keys: 'H' },
-          ]]}
-          trailing={
-            <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
-              <ToolButton icon="pen-line" label="Ink" keys="I" active={inkActive} onClick={handleInkToggle} />
-              {inkActive && <ToolButton icon="eraser" label="Erase" active={eraserActive} onClick={() => setEraserActive(!eraserActive)} />}
-              <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="secondary" icon="download">Import</Button>
-              <Button onClick={() => { void handleGroupClusters() }} size="sm" variant="secondary" icon="boxes">Group</Button>
-            </span>
-          }
-        />
+        <div role="toolbar" aria-label="Canvas tools" style={floatingSurface}>
+          <ToolButton icon="mouse-pointer-2" label="Select" keys="V" active={isTool('select')} onClick={() => pickTool('select')} />
+          <ToolButton icon="hand" label="Pan" keys="H" active={isTool('hand')} onClick={() => pickTool('hand')} />
+          <ToolbarDivider />
+          <ToolButton icon="pen-line" label="Ink" keys="I" active={inkToolActive} onClick={handleInk} />
+          <ToolButton icon="square" label="Rectangle" keys="R" active={isTool('geo')} onClick={() => pickTool('geo')} />
+          <ToolButton icon="tag" label="Tag" onClick={dismissInk} />
+          <ToolButton icon="file-text" label="Doc" onClick={dismissInk} />
+          <ToolButton icon="type" label="Text" keys="T" active={isTool('text')} onClick={() => pickTool('text')} />
+          <ToolbarDivider />
+          <ToolButton icon="mic" label="Mic" onClick={dismissInk} />
+          <ToolButton icon="message-circle" label="Chat" onClick={dismissInk} />
+          <ToolbarDivider />
+          <ToolButton icon="plus" label="Add" onClick={dismissInk} />
+        </div>
       </div>
       {toast && (
         <div
@@ -372,6 +476,8 @@ import { InkContext } from './ink/InkContext'
 function GlobalKeyboardShortcuts() {
   const editor = useEditor()
   const { open: paletteOpen } = React.useContext(CommandPaletteContext)
+  // Tracks hold-space-to-pan: whether space is held and the tool to restore.
+  const panRef = useRef<{ down: boolean; prev: string | null }>({ down: false, prev: null })
 
   useEffect(() => {
     const isTyping = (e: KeyboardEvent) => {
@@ -398,8 +504,17 @@ function GlobalKeyboardShortcuts() {
           break
         }
         case ' ': {
+          // Hold space → temporary pan (hand tool); release restores the prior
+          // tool. Guarded against key-repeat so holding doesn't flip-flop.
           e.preventDefault()
-          editor.setCurrentTool(editor.getCurrentToolId() === 'hand' ? 'select' : 'hand')
+          if (!panRef.current.down) {
+            panRef.current.down = true
+            const cur = editor.getCurrentToolId()
+            if (cur !== 'hand') {
+              panRef.current.prev = cur
+              editor.setCurrentTool('hand')
+            }
+          }
           break
         }
         case 'f':
@@ -511,8 +626,22 @@ function GlobalKeyboardShortcuts() {
       }
     }
 
+    // Release space → restore the tool we were on before the temporary pan.
+    const upHandler = (e: KeyboardEvent) => {
+      if (e.key === ' ' && panRef.current.down) {
+        panRef.current.down = false
+        const prev = panRef.current.prev
+        panRef.current.prev = null
+        editor.setCurrentTool(prev ?? 'select')
+      }
+    }
+
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keyup', upHandler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('keyup', upHandler)
+    }
   }, [editor, paletteOpen])
 
   return null
@@ -616,16 +745,17 @@ function ZoomPill() {
 
 function CanvasOverlays() {
   const editor = useEditor()
-  const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
+  const { strokes, setStrokes } = React.useContext(InkContext)
   useClusteringLayout(editor)
   useThreadLoader(editor)
   return (
     <>
       <TagConnectionOverlay />
       <TetherOverlay />
+      {/* Legacy ink strokes render read-only; new ink uses tldraw's draw tool. */}
       <InkLayer
-        active={inkActive}
-        eraserActive={eraserActive}
+        active={false}
+        eraserActive={false}
         strokes={strokes}
         onStrokesChange={setStrokes}
       />
@@ -648,6 +778,10 @@ export default function App() {
     setInkActiveRaw(v)
     if (!v) setEraserActive(false)
   }, [])
+
+  const inkCtx = React.useMemo(() => ({
+    inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes,
+  }), [inkActive, eraserActive, strokes, setInkActive, setStrokes])
 
   // ── Command palette state ──
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -711,7 +845,7 @@ export default function App() {
     <FilterProvider>
       <TagFocusProvider>
         <CommandPaletteContext.Provider value={paletteCtx}>
-          <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
+          <InkContext.Provider value={inkCtx}>
             {/* App shell — deepest backdrop */}
             <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)', overflow: 'hidden' }}>
               <NavBar />

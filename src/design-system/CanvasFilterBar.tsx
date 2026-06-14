@@ -1,6 +1,6 @@
 import React from 'react'
-import { Button } from './Button'
-import { TypeGlyph, typeGlyphMeta } from './TypeGlyph'
+import { Icon } from './Icon'
+import { typeGlyphMeta } from './TypeGlyph'
 
 /**
  * Pill keys & order — the five canonical card types per the design spec.
@@ -24,6 +24,26 @@ interface CanvasFilterBarProps {
   style?: React.CSSProperties
 }
 
+const pillBase: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  height: 28, padding: '0 11px', border: 'none', borderRadius: 'var(--radius-pill)',
+  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)',
+  whiteSpace: 'nowrap', cursor: 'pointer', background: 'transparent', color: 'var(--text-3)',
+  transition: 'background var(--duration) var(--ease-mech), color var(--duration) var(--ease-mech), box-shadow var(--duration) var(--ease-mech)',
+}
+
+// Selected = a dark "pressed" inset (darker than the bar), subtle hairline +
+// inset shadow. NO accent fill — the accent only ever shows on the type glyph.
+function pillStyle(selected: boolean): React.CSSProperties {
+  if (!selected) return pillBase
+  return {
+    ...pillBase,
+    background: 'var(--bg-app)',
+    color: 'var(--text-1)',
+    boxShadow: 'var(--shadow-inset), inset 0 0 0 1px var(--border-1)',
+  }
+}
+
 export function CanvasFilterBar({ active = [], onToggle, onClear, style }: CanvasFilterBarProps) {
   const allActive = active.length === 0
 
@@ -39,28 +59,30 @@ export function CanvasFilterBar({ active = [], onToggle, onClear, style }: Canva
         ...style,
       }}
     >
-      <Button
-        variant={allActive ? 'primary' : 'ghost'}
-        size="sm"
-        ariaPressed={allActive}
+      <button
+        type="button"
+        aria-pressed={allActive}
         onClick={onClear}
+        style={{ ...pillStyle(allActive), padding: '0 12px' }}
       >
         All
-      </Button>
+      </button>
       <span style={{ width: 1, height: 16, background: 'var(--border-1)', flexShrink: 0, margin: '0 2px' }} />
       {FILTER_PILLS.map(({ key, label }) => {
         const selected = active.includes(key)
+        const meta = typeGlyphMeta[key] ?? typeGlyphMeta.project
         return (
-          <Button
+          <button
             key={key}
-            variant={selected ? 'primary' : 'ghost'}
-            size="sm"
-            ariaPressed={selected}
+            type="button"
+            aria-pressed={selected}
             onClick={() => onToggle?.(key)}
+            style={pillStyle(selected)}
           >
-            <TypeGlyph type={typeGlyphMeta[key] ? key : 'project'} size={14} />
+            {/* glyph keeps its natural type colour when selected, greys out when not */}
+            <Icon name={meta.icon} size={14} color={selected ? meta.color : 'var(--text-3)'} />
             {label}
-          </Button>
+          </button>
         )
       })}
     </div>
