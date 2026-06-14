@@ -1,5 +1,6 @@
 import { useEditor, useValue, type Editor, type TLShape } from 'tldraw'
 import { useTagFocus } from './TagFocusContext'
+import { useFocus } from './FocusContext'
 import { tagColorFor } from './tagStore'
 
 /** String tags on any shape (chat cards, skills, gems, …), or []. */
@@ -10,6 +11,7 @@ function shapeTags(s: TLShape): string[] {
 
 interface ConnLine {
   key: string
+  aId: string; bId: string
   x1: number; y1: number; x2: number; y2: number
   tags: string[]
 }
@@ -73,7 +75,7 @@ function buildConnections(editor: Editor): { lines: ConnLine[]; junctions: Junct
       const bEdge = rectEdgePoint(bb.midX, bb.midY, bb.w / 2, bb.h / 2, ba.midX, ba.midY)
       const p1 = editor.pageToScreen(aEdge)
       const p2 = editor.pageToScreen(bEdge)
-      lines.push({ key: `${a.shape.id}__${b.shape.id}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, tags: shared })
+      lines.push({ key: `${a.shape.id}__${b.shape.id}`, aId: a.shape.id, bId: b.shape.id, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, tags: shared })
       degree.set(a.shape.id, (degree.get(a.shape.id) ?? 0) + 1)
       degree.set(b.shape.id, (degree.get(b.shape.id) ?? 0) + 1)
     }
@@ -100,40 +102,46 @@ function buildConnections(editor: Editor): { lines: ConnLine[]; junctions: Junct
 export function TagConnectionOverlay() {
   const editor = useEditor()
   const { hovered } = useTagFocus()
+  const { focusActive, focusedNodeId, connectedIds } = useFocus()
   const { lines, junctions } = useValue('connections', () => buildConnections(editor), [editor])
 
   if (lines.length === 0) return null
 
   const isHot = (tags: string[]) => hovered != null && tags.some((t) => t.toLowerCase() === hovered.toLowerCase())
+  // In focus mode, only edges touching the focused node stay visible.
+  const lineFocusDimmed = (aId: string, bId: string) => focusActive && aId !== focusedNodeId && bId !== focusedNodeId
+  const nodeFocusDimmed = (id: string) => focusActive && id !== focusedNodeId && !connectedIds.has(id)
 
   return (
     <svg data-testid="connection-lines" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}>
-      {lines.map(({ key, x1, y1, x2, y2, tags }) => {
+      {lines.map(({ key, aId, bId, x1, y1, x2, y2, tags }) => {
         const hot = isHot(tags)
+        const dim = lineFocusDimmed(aId, bId)
         return (
           <line
             key={key}
             x1={x1} y1={y1} x2={x2} y2={y2}
             style={{
               stroke: hot ? highlightColor(hovered!) : 'var(--connection)',
-              transition: 'stroke var(--duration) var(--ease-mech)',
+              transition: 'stroke var(--duration) var(--ease-mech), stroke-opacity var(--duration) var(--ease-mech)',
             }}
             strokeWidth={hot ? 2.5 : 1.25}
-            strokeOpacity={hot ? 1 : 0.9}
+            strokeOpacity={dim ? 0.06 : hot ? 1 : 0.9}
             strokeLinecap="round"
           />
         )
       })}
       {junctions.map(({ key, cx, cy, tags }) => {
         const hot = isHot(tags)
+        const dim = nodeFocusDimmed(key)
         return (
           <circle
             key={`j-${key}`}
             cx={cx}
             cy={cy}
             r={hot ? 4 : 3}
-            style={{ fill: hot ? highlightColor(hovered!) : 'var(--connection)', transition: 'fill var(--duration) var(--ease-mech)' }}
-            fillOpacity={hot ? 1 : 0.9}
+            style={{ fill: hot ? highlightColor(hovered!) : 'var(--connection)', transition: 'fill var(--duration) var(--ease-mech), fill-opacity var(--duration) var(--ease-mech)' }}
+            fillOpacity={dim ? 0.06 : hot ? 1 : 0.9}
           />
         )
       })}

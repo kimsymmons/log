@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { HTMLContainer } from 'tldraw'
+import { useFocus, isFocusDimmed } from './FocusContext'
 
 // ── Logical node-type filter keys ────────────────────────────────────────────
 //
@@ -132,17 +133,25 @@ export function FilterDimContainer({
   dataShapeType,
   children,
 }: {
-  shape: FilterShape
+  shape: FilterShape & { id?: string }
   dataShapeType?: string
   children: React.ReactNode
 }) {
   const { filterActive, isDimmed } = useFilterActive()
-  const dimmed = filterActive && isDimmed(shape)
+  const { focusActive, focusedNodeId, connectedIds } = useFocus()
+
+  const filterDimmed = filterActive && isDimmed(shape)
+  const focusDimmed = focusActive && shape.id != null && isFocusDimmed(shape.id, focusedNodeId, connectedIds)
+  const dimmed = filterDimmed || focusDimmed
+  // Orbit focus dims harder (~0.12) than the type filter (0.15).
+  const opacity = focusDimmed ? 0.12 : 0.15
+
   return (
     <HTMLContainer
       data-shape-type={dataShapeType}
-      data-filter-dimmed={dimmed ? 'true' : undefined}
-      style={dimmed ? { pointerEvents: 'none', opacity: 0.15 } : { pointerEvents: 'all' }}
+      data-filter-dimmed={filterDimmed ? 'true' : undefined}
+      data-focus-dimmed={focusDimmed ? 'true' : undefined}
+      style={dimmed ? { pointerEvents: 'none', opacity } : { pointerEvents: 'all' }}
     >
       {children}
     </HTMLContainer>

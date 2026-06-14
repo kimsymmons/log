@@ -7,6 +7,7 @@ import {
   type Editor,
 } from 'tldraw'
 import { FilterDimContainer } from '../canvas/FilterContext'
+import { FocusOrbitButton } from '../canvas/FocusContext'
 import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
 import type { ArtifactSsePayload } from '../types/artifact'
 import {
@@ -332,6 +333,7 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
           >
             {title}
           </span>
+          <FocusOrbitButton shapeId={shape.id} />
         </div>
 
         {errorMessage ? (
@@ -485,6 +487,7 @@ export function ChatCardInner({ shape }: { shape: ChatCardShape }) {
       <div style={{ padding: 'var(--space-3)', borderBottom: '1px solid var(--border-1)', display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
         <TypeGlyph type={cardType} size={16} />
         <span style={{ flex: 1, minWidth: 0, fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-base)', color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+        <FocusOrbitButton shapeId={shape.id} />
         <button
           onClick={() => dispatch('collapse')}
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--text-md)', color: 'var(--text-3)', padding: '0 2px', lineHeight: 1 }}
