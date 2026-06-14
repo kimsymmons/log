@@ -5,7 +5,7 @@ import { getPosition } from '../canvas/positionStore'
 import { firstTwoSentences, extractTags } from '../canvas/autoTag'
 import { wasAutoTagged, markAutoTagged } from '../canvas/tagStore'
 
-interface ChatArtifact {
+interface CardArtifact {
   id: string
   type: string
   title: string | null
@@ -14,8 +14,20 @@ interface ChatArtifact {
   created_at: number
 }
 
-const THREAD_CARD_SIZE = { w: 264, h: 200 }
-// Grid fallback when a thread has no persisted position.
+interface LoaderConfig {
+  /** Backend artifact `type` to fetch (e.g. 'chat', 'idea'). */
+  artifactType: string
+  /** Card glyph type stored on the shape (e.g. 'thread', 'idea'). */
+  cardType: string
+  /** Stable shape-id prefix, `shape:<idPrefix>-<artifactId>`. */
+  idPrefix: 'thread' | 'idea'
+  defaultTitle: string
+  /** Whether to surface the artifact's sourceUrl as a card link. */
+  withSourceUrl: boolean
+}
+
+const CARD_SIZE = { w: 264, h: 200 }
+// Grid fallback when a card has no persisted position.
 const GRID = { cols: 4, dx: 300, dy: 232, originX: 80, originY: 80 }
 
 function parseMessages(content: string | null): Message[] {
@@ -43,49 +55,49 @@ function bodyOf(messages: Message[], content: string | null): string {
 
 const apiBase = () => (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
 
-async function fetchThreads(): Promise<ChatArtifact[]> {
+async function fetchArtifacts(type: string): Promise<CardArtifact[]> {
   const token = localStorage.getItem('auth_token') ?? ''
   try {
-    const res = await fetch(`${apiBase()}/artifacts?type=chat`, {
+    const res = await fetch(`${apiBase()}/artifacts?type=${encodeURIComponent(type)}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (!res.ok) return []
-    return (await res.json()) as ChatArtifact[]
+    return (await res.json()) as CardArtifact[]
   } catch {
     return []
   }
 }
 
 /**
- * Loads existing chat threads from the backend onto the canvas as Thread
- * cards, once per mount. Each thread gets a stable shape id so positions
- * (positionStore) and tags (tagStore) survive reloads; content is refreshed
- * from the backend so reply counts and previews stay current.
+ * Loads backend artifacts of one type onto the canvas as chat-card shapes,
+ * once per mount. Each card gets a stable shape id so positions (positionStore)
+ * and tags (tagStore) survive reloads; content is refreshed from the backend.
+ * A card with no tags is auto-tagged once from its title + body.
  */
-export function useThreadLoader(editor: Editor): void {
+function useArtifactCardLoader(editor: Editor, cfg: LoaderConfig): void {
   const ran = useRef(false)
   useEffect(() => {
     if (ran.current) return
     ran.current = true
 
     void (async () => {
-      const threads = await fetchThreads()
-      if (threads.length === 0) return
+      const artifacts = await fetchArtifacts(cfg.artifactType)
+      if (artifacts.length === 0) return
 
       editor.batch(() => {
-        threads.forEach((artifact, i) => {
-          const shapeId = `shape:thread-${artifact.id}` as ChatCardShape['id']
+        artifacts.forEach((artifact, i) => {
+          const shapeId = `shape:${cfg.idPrefix}-${artifact.id}` as ChatCardShape['id']
           const messages = parseMessages(artifact.content)
           const body = bodyOf(messages, artifact.content)
           // Content fields refresh from the backend on every load; tags are NOT
           // touched here — they live in shape props and persist via the node
           // adapter, so an existing card keeps the tags the user assigned.
           const content = {
-            title: artifact.title ?? 'Untitled thread',
+            title: artifact.title ?? cfg.defaultTitle,
             summary: body,
             messages,
-            cardType: 'thread',
-            sourceUrl: artifact.sourceUrl ?? undefined,
+            cardType: cfg.cardType,
+            sourceUrl: cfg.withSourceUrl ? (artifact.sourceUrl ?? undefined) : undefined,
             createdAt: artifact.created_at,
           }
 
@@ -101,13 +113,13 @@ export function useThreadLoader(editor: Editor): void {
               type: ChatCardShapeUtil.type,
               x,
               y,
-              props: { ...content, tags: [], w: THREAD_CARD_SIZE.w, h: THREAD_CARD_SIZE.h },
+              props: { ...content, tags: [], w: CARD_SIZE.w, h: CARD_SIZE.h },
             })
           }
 
-          // Auto-tag once: a thread with no tags gets up to 4 keyword tags
-          // derived from its title + body. Cached so it never re-runs, and a
-          // card the user has already tagged is left alone.
+          // Auto-tag once: a card with no tags gets up to 4 keyword tags derived
+          // from its title + body. Cached so it never re-runs, and a card the
+          // user has already tagged is left alone.
           const card = editor.getShape<ChatCardShape>(shapeId)
           if (card && (card.props.tags ?? []).length === 0 && !wasAutoTagged(artifact.id)) {
             const tags = extractTags(`${content.title} ${body}`)
@@ -120,4 +132,20 @@ export function useThreadLoader(editor: Editor): void {
       })
     })()
   }, [editor])
+}
+
+/** Loads chat sessions as Thread cards (with a source link back to the chat). */
+export function useThreadLoader(editor: Editor): void {
+  useArtifactCardLoader(editor, {
+    artifactType: 'chat', cardType: 'thread', idPrefix: 'thread',
+    defaultTitle: 'Untitled thread', withSourceUrl: true,
+  })
+}
+
+/** Loads idea artifacts as Idea cards (lightbulb glyph, no source link). */
+export function useIdeaLoader(editor: Editor): void {
+  useArtifactCardLoader(editor, {
+    artifactType: 'idea', cardType: 'idea', idPrefix: 'idea',
+    defaultTitle: 'Untitled idea', withSourceUrl: false,
+  })
 }

@@ -22,7 +22,7 @@ test.describe('ink layer', () => {
   })
 
   test('clicking the Ink toolbar button toggles the ink mode cursor', async ({ page }) => {
-    const inkButton = page.getByRole('button', { name: /ink/i })
+    const inkButton = page.getByRole('button', { name: /pen/i })
     await expect(inkButton).toBeVisible()
 
     // Before activating — default canvas cursor
@@ -51,7 +51,7 @@ test.describe('ink layer', () => {
     })
 
     // Activate ink mode
-    await page.getByRole('button', { name: /ink/i }).click()
+    await page.getByRole('button', { name: /pen/i }).click()
 
     // Draw a short stroke via pointer events
     const inkCanvas = page.locator('canvas').last()

@@ -29,6 +29,14 @@ describe('shapeLogicalType', () => {
     expect(shapeLogicalType(mk('chat-card'))).toBe('thread')
   })
 
+  it('maps a chat-card by its cardType (idea/doc/sketch) when set', () => {
+    expect(shapeLogicalType({ type: 'chat-card', props: { tags: [], cardType: 'idea' } })).toBe('idea')
+    expect(shapeLogicalType({ type: 'chat-card', props: { tags: [], cardType: 'doc' } })).toBe('doc')
+    expect(shapeLogicalType({ type: 'chat-card', props: { tags: [], cardType: 'sketch' } })).toBe('sketch')
+    // cardType 'thread' still defers to the project-tag rule
+    expect(shapeLogicalType({ type: 'chat-card', props: { tags: ['project'], cardType: 'thread' } })).toBe('project')
+  })
+
   it('returns null for non-filterable shapes', () => {
     expect(shapeLogicalType(mk('frame'))).toBeNull()
     expect(shapeLogicalType(mk('arrow'))).toBeNull()
