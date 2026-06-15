@@ -224,6 +224,18 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     res.json({ token: signToken('test@log.local') })
   })
 
+  // POST /auth/dev-token — frictionless local-dev auth. Mints a JWT for a fixed
+  // dev identity so `npm run dev` shows the canvas with no manual sign-in. Hard-
+  // gated to NODE_ENV === 'development' (404 in production / any other env), and
+  // the front end only calls it under import.meta.env.DEV.
+  app.post('/auth/dev-token', (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV !== 'development') {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    res.json({ token: signToken('dev@log.local') })
+  })
+
   // POST /inference — SSE streaming proxy to Anthropic
   app.post('/inference', requireAuth, async (req: Request, res: Response) => {
     const {

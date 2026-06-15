@@ -653,8 +653,16 @@ function GlobalKeyboardShortcuts() {
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
-// Dot-grid canvas background (P2). Painted behind shapes in screen space.
+// Base dot spacing in page units (mirrors --canvas-dot-gap).
+const BASE_DOT_GAP = 24
+
+// Dot-grid canvas background (P2). Tied to tldraw's camera: the gap scales with
+// zoom and the pattern offsets with pan, so the grid tracks the content. The dot
+// size itself stays fixed at --canvas-dot-size.
 function CanvasBackground() {
+  const editor = useEditor()
+  const camera = useValue('camera', () => editor.getCamera(), [editor])
+  const gap = BASE_DOT_GAP * camera.z
   return (
     <div
       style={{
@@ -663,7 +671,8 @@ function CanvasBackground() {
         background: 'var(--bg-canvas)',
         backgroundImage:
           'radial-gradient(circle, var(--canvas-dot) var(--canvas-dot-size), transparent var(--canvas-dot-size))',
-        backgroundSize: 'var(--canvas-dot-gap) var(--canvas-dot-gap)',
+        backgroundSize: `${gap}px ${gap}px`,
+        backgroundPosition: `${camera.x}px ${camera.y}px`,
       }}
     />
   )
@@ -791,7 +800,42 @@ function CanvasOverlays() {
   )
 }
 
+// In dev, auto-mint an auth token so `npm run dev` shows the canvas with no
+// manual sign-in. No-op in production builds (import.meta.env.DEV is false) and
+// when a token already exists. Blocks the first render until the token is set so
+// the canvas loaders fetch authenticated.
+function useDevAuth(): boolean {
+  // Skip under automation (navigator.webdriver) so Playwright specs keep their
+  // unauthenticated/empty-canvas starting state and control auth themselves.
+  const [ready, setReady] = useState(
+    () =>
+      !import.meta.env.DEV ||
+      (typeof navigator !== 'undefined' && navigator.webdriver) ||
+      Boolean(localStorage.getItem('auth_token')),
+  )
+  useEffect(() => {
+    if (ready) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
+        const res = await fetch(`${apiBase}/auth/dev-token`, { method: 'POST' })
+        if (res.ok) {
+          const { token } = (await res.json()) as { token?: string }
+          if (token) localStorage.setItem('auth_token', token)
+        }
+      } catch {
+        // backend down or not in dev — the canvas just renders unauthenticated
+      }
+      if (!cancelled) setReady(true)
+    })()
+    return () => { cancelled = true }
+  }, [ready])
+  return ready
+}
+
 export default function App() {
+  const authReady = useDevAuth()
   const [inkActive, setInkActiveRaw] = useState(false)
   const [eraserActive, setEraserActive] = useState(false)
   const { strokes, setStrokes } = useInkStrokes()
@@ -863,6 +907,9 @@ export default function App() {
 
   const options = React.useMemo(() => ({ maxPages: 1 }), [])
 
+  // Hold render until the dev token is minted (dev only) so loaders are authed.
+  if (!authReady) return <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)' }} />
+
   return (
     <FilterProvider>
       <TagFocusProvider>
@@ -872,11 +919,12 @@ export default function App() {
             {/* App shell — deepest backdrop */}
             <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)', overflow: 'hidden' }}>
               <NavBar />
-              {/* Canvas panel — inset below the 56px nav, hairline-framed, dot-grid surface */}
+              {/* Canvas panel — inset below the 56px nav, hairline-framed, dot-grid surface.
+                  16px sides/bottom to match the nav's 16px horizontal padding. */}
               <div
                 style={{
                   position: 'absolute',
-                  inset: '56px 8px 8px',
+                  inset: '56px 16px 16px',
                   border: '1px solid var(--border-2)',
                   borderRadius: 'var(--radius-4)',
                   boxShadow: 'var(--shadow-canvas)',
