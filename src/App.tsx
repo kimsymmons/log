@@ -653,8 +653,16 @@ function GlobalKeyboardShortcuts() {
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
-// Dot-grid canvas background (P2). Painted behind shapes in screen space.
+// Base dot spacing in page units (mirrors --canvas-dot-gap).
+const BASE_DOT_GAP = 24
+
+// Dot-grid canvas background (P2). Tied to tldraw's camera: the gap scales with
+// zoom and the pattern offsets with pan, so the grid tracks the content. The dot
+// size itself stays fixed at --canvas-dot-size.
 function CanvasBackground() {
+  const editor = useEditor()
+  const camera = useValue('camera', () => editor.getCamera(), [editor])
+  const gap = BASE_DOT_GAP * camera.z
   return (
     <div
       style={{
@@ -663,7 +671,8 @@ function CanvasBackground() {
         background: 'var(--bg-canvas)',
         backgroundImage:
           'radial-gradient(circle, var(--canvas-dot) var(--canvas-dot-size), transparent var(--canvas-dot-size))',
-        backgroundSize: 'var(--canvas-dot-gap) var(--canvas-dot-gap)',
+        backgroundSize: `${gap}px ${gap}px`,
+        backgroundPosition: `${camera.x}px ${camera.y}px`,
       }}
     />
   )
@@ -872,11 +881,12 @@ export default function App() {
             {/* App shell — deepest backdrop */}
             <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)', overflow: 'hidden' }}>
               <NavBar />
-              {/* Canvas panel — inset below the 56px nav, hairline-framed, dot-grid surface */}
+              {/* Canvas panel — inset below the 56px nav, hairline-framed, dot-grid surface.
+                  16px sides/bottom to match the nav's 16px horizontal padding. */}
               <div
                 style={{
                   position: 'absolute',
-                  inset: '56px 8px 8px',
+                  inset: '56px 16px 16px',
                   border: '1px solid var(--border-2)',
                   borderRadius: 'var(--radius-4)',
                   boxShadow: 'var(--shadow-canvas)',
