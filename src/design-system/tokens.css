@@ -56,8 +56,10 @@
   /* Canvas panel framing */
   --shadow-canvas: 0 -1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.5);
 
-  /* Connections — derive from shared tags, never hand-drawn */
-  --connection: rgba(94, 106, 210, 0.22);
+  /* Connections — derive from shared tags, never hand-drawn. Neutral deep
+     blue-grey so resting lines recede; they take the shared tag's semantic
+     colour on hover. Structural (Thread↔Idea) links render dashed (see overlay). */
+  --connection: rgba(60, 70, 90, 0.6);
   --connection-active: var(--accent);
 
   /* Sticky note tints */
