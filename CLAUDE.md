@@ -45,13 +45,40 @@ Two-layer approach: Vitest for units/integration, Playwright for E2E.
 
 ## Visual regression harness
 
-`e2e/visual-baseline.spec.ts` captures canvas screenshots against `BASE_URL`
-(default `https://log-five-xi.vercel.app`; override with `BASE_URL=http://localhost:5173` to test locally).
+`e2e/visual-baseline.spec.ts` (full-page chrome) and `e2e/visual/*.spec.ts`
+(component-level: thread card, connection line, filter bar, toolbar, zoom pill)
+capture screenshots against `BASE_URL`.
+- **Where the baselines live:** committed PNGs in a `<spec>.spec.ts-snapshots/`
+  dir next to each spec, named `<name>-chromium-darwin.png` (per-platform — a
+  Linux CI run produces different files, so regenerate on macOS).
 - Auth: `e2e/global-setup.ts` exchanges `TEST_BYPASS_TOKEN` for a JWT via the
   backend `POST /auth/test-token` (set `TEST_API_URL` for a non-local backend),
   writing `e2e/.auth/token.json`. Specs seed it into `localStorage.auth_token`.
-- Refresh baselines: `npx playwright test e2e/visual-baseline.spec.ts --update-snapshots`.
-- Component-level visuals live in `e2e/visual/` (thread card, connection line, filter bar, toolbar, zoom pill).
+  (When `TEST_BYPASS_TOKEN` is unset, specs run unauthenticated; the visual
+  specs mock `**/artifacts**` → `[]` and seed their own shapes, so they don't
+  need a live backend.)
+- **Test your branch, not production:** `BASE_URL` defaults to the deployed app
+  (`https://log-five-xi.vercel.app`). For local changes you MUST pass
+  `BASE_URL=http://localhost:5173` or you're baselining production. Have a dev
+  server running or let the `webServer` block start one.
+- **Regenerate** after an intentional UI change (covers both dirs):
+  `BASE_URL=http://localhost:5173 npx playwright test e2e/visual-baseline.spec.ts e2e/visual --update-snapshots`,
+  then re-run without `--update-snapshots` to confirm green, and eyeball the new
+  PNGs. Gotcha: `--update-snapshots` occasionally won't rewrite a file it deems
+  unchanged — if a baseline looks stale, `rm` the PNG and re-run to force it.
+- **Vite dev-reload gotcha:** the first page load (and the first use of tldraw's
+  `draw` tool) triggers a one-time Vite dep re-optimization that reloads the
+  page and kills any in-flight `page.evaluate` ("Execution context was
+  destroyed"). Gate readiness with navigation-resilient `page.waitForFunction(...)`
+  (it re-evaluates after the reload) rather than bare `evaluate`, and settle
+  before driving the editor. For draw-tool flows, test against a production
+  preview (`npx vite build && npx vite preview --port 4173`, `BASE_URL=…:4173`)
+  which pre-bundles everything and never reloads. NB: `vite build` wipes `dist/`,
+  including the server's CJS marker — re-add `dist/server/package.json`
+  `{"type":"commonjs"}` before running the built backend.
+- **Viewing the seeded app manually:** the canvas silently renders nothing
+  without auth — `localStorage.setItem('auth_token', <jwt>)` then reload. Mint a
+  jwt with the backend `POST /auth/test-token` (needs `TEST_BYPASS_TOKEN`).
 
 ## PR review process
 
@@ -59,7 +86,21 @@ Before every merge:
 1. Run `npm test` + `tsc` — must be clean
 2. Start the app locally, screenshot it, check the visual audit checklist (see memory)
 3. Run `npm run test:e2e` — includes visual regression tests
-4. No raw hex values in changed files — CSS variables only
+4. No raw hex values in changed files — CSS variables only (tokens.css is the one
+   place hex is defined; everything else uses `var(--token)`)
 5. tldraw default chrome must be hidden; custom chrome must match design spec positions
 
 Visual audit checklist covers: nav/shell, canvas inset, dot grid, tldraw UI hidden, filter bar pills, toolbar, zoom pill font (--font-mono), card typography, surface colours.
+
+**What "passing" means — the hard gate is `npm test` + `tsc`.**
+- `tsc` means BOTH configs: `npx tsc --noEmit` (front-end, `tsconfig.json`) AND
+  `npx tsc --project tsconfig.server.json --noEmit` (server). The default `tsc`
+  only checks the front end.
+- The **visual-regression specs** (`e2e/visual-baseline.spec.ts` + `e2e/visual`)
+  must pass locally; regenerate + eyeball their baselines for any intentional UI
+  change (see Visual regression harness above).
+- The **full `npm run test:e2e` suite is environmentally flaky in CI** (auth,
+  links, musing, bench specs fail on infra, not code) — a red full-suite run does
+  NOT block a merge. The gate is: vitest green, both `tsc`s clean, the visual
+  specs green, and the manual visual-audit checklist. Don't chase green on the
+  whole e2e suite.
