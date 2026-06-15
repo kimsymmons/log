@@ -43,6 +43,8 @@ export type ChatCardShape = TLBaseShape<'chat-card', {
   tags?: string[]
   cardType?: string
   sourceUrl?: string
+  /** For Idea cards: the artifact id of the Thread this was extracted from. */
+  sourceThreadId?: string
 }>
 
 /** Default card type when a card carries none. Chat cards are threads. */
@@ -561,6 +563,7 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     tags: T.optional(T.arrayOf(T.string)),
     cardType: T.optional(T.string),
     sourceUrl: T.optional(T.string),
+    sourceThreadId: T.optional(T.string),
   }
 
   // Tracks artifact offsets at drag start so they can follow the parent

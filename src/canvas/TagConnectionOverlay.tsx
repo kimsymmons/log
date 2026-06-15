@@ -1,6 +1,6 @@
 import { useEditor, useValue, type Editor, type TLShape } from 'tldraw'
 import { useTagFocus } from './TagFocusContext'
-import { useFocus } from './FocusContext'
+import { useFocus, nodeArtifactId } from './FocusContext'
 import { tagColorFor } from './tagStore'
 
 /** String tags on any shape (chat cards, skills, gems, …), or []. */
@@ -14,6 +14,8 @@ interface ConnLine {
   aId: string; bId: string
   x1: number; y1: number; x2: number; y2: number
   tags: string[]
+  /** Structural (Thread↔Idea via sourceThreadId) links render dashed. */
+  structural: boolean
 }
 
 interface Junction {
@@ -49,12 +51,21 @@ const highlightColor = (tag: string) => `var(--sticky-${tagColorFor(tag)}-text)`
  * recompute reactively on every camera, shape and tag change.
  */
 function buildConnections(editor: Editor): { lines: ConnLine[]; junctions: Junction[] } {
-  // Connections derive from shared tags on ANY node type (chat cards, skills,
-  // gems, musings, …), never just chat cards.
+  // Connections come from two sources on ANY node type: shared tags (solid) and
+  // structural Thread↔Idea links via sourceThreadId (dashed).
   const cards = editor
     .getCurrentPageShapes()
-    .map((s) => ({ shape: s, bounds: editor.getShapePageBounds(s), tags: shapeTags(s) }))
-    .filter((c) => c.tags.length > 0 && c.bounds != null)
+    .map((s) => {
+      const props = (s.props ?? {}) as { sourceThreadId?: unknown }
+      return {
+        shape: s,
+        bounds: editor.getShapePageBounds(s),
+        tags: shapeTags(s),
+        artifactId: nodeArtifactId(s.id),
+        sourceThreadId: typeof props.sourceThreadId === 'string' ? props.sourceThreadId : null,
+      }
+    })
+    .filter((c) => c.bounds != null && (c.tags.length > 0 || c.sourceThreadId != null))
 
   if (cards.length > MAX_TAGGED_CARDS) return { lines: [], junctions: [] }
 
@@ -66,7 +77,10 @@ function buildConnections(editor: Editor): { lines: ConnLine[]; junctions: Junct
       const b = cards[j]
       const setA = new Set(a.tags.map((t) => t.toLowerCase()))
       const shared = b.tags.filter((t) => setA.has(t.toLowerCase()))
-      if (shared.length === 0) continue
+      const structural =
+        (a.sourceThreadId != null && a.sourceThreadId === b.artifactId) ||
+        (b.sourceThreadId != null && b.sourceThreadId === a.artifactId)
+      if (shared.length === 0 && !structural) continue
 
       const ba = a.bounds!
       const bb = b.bounds!
@@ -75,7 +89,7 @@ function buildConnections(editor: Editor): { lines: ConnLine[]; junctions: Junct
       const bEdge = rectEdgePoint(bb.midX, bb.midY, bb.w / 2, bb.h / 2, ba.midX, ba.midY)
       const p1 = editor.pageToScreen(aEdge)
       const p2 = editor.pageToScreen(bEdge)
-      lines.push({ key: `${a.shape.id}__${b.shape.id}`, aId: a.shape.id, bId: b.shape.id, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, tags: shared })
+      lines.push({ key: `${a.shape.id}__${b.shape.id}`, aId: a.shape.id, bId: b.shape.id, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, tags: shared, structural })
       degree.set(a.shape.id, (degree.get(a.shape.id) ?? 0) + 1)
       degree.set(b.shape.id, (degree.get(b.shape.id) ?? 0) + 1)
     }
@@ -114,7 +128,7 @@ export function TagConnectionOverlay() {
 
   return (
     <svg data-testid="connection-lines" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}>
-      {lines.map(({ key, aId, bId, x1, y1, x2, y2, tags }) => {
+      {lines.map(({ key, aId, bId, x1, y1, x2, y2, tags, structural }) => {
         const hot = isHot(tags)
         const dim = lineFocusDimmed(aId, bId)
         return (
@@ -127,7 +141,8 @@ export function TagConnectionOverlay() {
             }}
             strokeWidth={hot ? 2.5 : 1.25}
             strokeOpacity={dim ? 0.06 : hot ? 1 : 0.9}
-            strokeLinecap="round"
+            strokeLinecap={structural ? 'butt' : 'round'}
+            strokeDasharray={structural ? '5 5' : undefined}
           />
         )
       })}

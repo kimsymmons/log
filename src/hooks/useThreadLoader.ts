@@ -11,7 +11,20 @@ interface ChatArtifact {
   title: string | null
   content: string | null
   sourceUrl?: string | null
+  tags?: string | string[] | null
   created_at: number
+}
+
+/** Parse the artifact's stored (haiku) tags, if any — JSON string or array. */
+export function parseStoredTags(raw: string | string[] | null | undefined): string[] | null {
+  if (Array.isArray(raw)) return raw.filter((t): t is string => typeof t === 'string')
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : null
+  } catch {
+    return null
+  }
 }
 
 const THREAD_CARD_SIZE = { w: 264, h: 200 }
@@ -77,9 +90,11 @@ export function useThreadLoader(editor: Editor): void {
           const shapeId = `shape:thread-${artifact.id}` as ChatCardShape['id']
           const messages = parseMessages(artifact.content)
           const body = bodyOf(messages, artifact.content)
-          // Content fields refresh from the backend on every load; tags are NOT
-          // touched here — they live in shape props and persist via the node
-          // adapter, so an existing card keeps the tags the user assigned.
+          // Semantic tags from the haiku extractor are authoritative when present.
+          const storedTags = parseStoredTags(artifact.tags)
+          // Content fields refresh from the backend on every load. Tags are only
+          // set here from storedTags (haiku) — otherwise an existing card keeps
+          // whatever tags it has (user- or deterministically-assigned).
           const content = {
             title: artifact.title ?? 'Untitled thread',
             summary: body,
@@ -87,6 +102,7 @@ export function useThreadLoader(editor: Editor): void {
             cardType: 'thread',
             sourceUrl: artifact.sourceUrl ?? undefined,
             createdAt: artifact.created_at,
+            ...(storedTags ? { tags: storedTags } : {}),
           }
 
           const existing = editor.getShape(shapeId)
@@ -101,15 +117,15 @@ export function useThreadLoader(editor: Editor): void {
               type: ChatCardShapeUtil.type,
               x,
               y,
-              props: { ...content, tags: [], w: THREAD_CARD_SIZE.w, h: THREAD_CARD_SIZE.h },
+              props: { ...content, tags: storedTags ?? [], w: THREAD_CARD_SIZE.w, h: THREAD_CARD_SIZE.h },
             })
           }
 
-          // Auto-tag once: a thread with no tags gets up to 4 keyword tags
-          // derived from its title + body. Cached so it never re-runs, and a
-          // card the user has already tagged is left alone.
+          // Deterministic fallback: only when the extractor hasn't tagged this
+          // thread. A thread with no tags gets up to 4 keyword tags from its
+          // title + body, cached so it never re-runs.
           const card = editor.getShape<ChatCardShape>(shapeId)
-          if (card && (card.props.tags ?? []).length === 0 && !wasAutoTagged(artifact.id)) {
+          if (!storedTags && card && (card.props.tags ?? []).length === 0 && !wasAutoTagged(artifact.id)) {
             const tags = extractTags(`${content.title} ${body}`)
             if (tags.length > 0) {
               editor.updateShape<ChatCardShape>({ id: shapeId, type: 'chat-card', props: { tags } })

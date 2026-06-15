@@ -39,6 +39,7 @@ import { FocusProvider, useFocus } from './canvas/FocusContext'
 import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
 import { useThreadLoader } from './hooks/useThreadLoader'
+import { useIdeaLoader } from './hooks/useIdeaLoader'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -767,6 +768,7 @@ function CanvasOverlays() {
   const { strokes, setStrokes } = React.useContext(InkContext)
   useClusteringLayout(editor)
   useThreadLoader(editor)
+  useIdeaLoader(editor)
   return (
     <>
       <FocusController />
