@@ -456,6 +456,43 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     res.json({ processed, ideasCreated })
   })
 
+  // POST /import/projects — upsert normalised ProjectEntity artifacts.
+  // Body: Array<{ artifactId, title, sourceUrl, content }>. Keyed by artifactId
+  // (a sanitised "${source}:${sourceId}") so re-importing a source updates in
+  // place rather than duplicating. The full ProjectEntity JSON lives in content.
+  app.post('/import/projects', requireAuth, (req: Request, res: Response) => {
+    const body = req.body
+    if (!Array.isArray(body)) {
+      res.status(400).json({ error: 'body must be an array' })
+      return
+    }
+
+    const upsert = db.prepare(
+      `INSERT INTO artifacts (id, type, title, content, sourceUrl, created_at, updated_at)
+       VALUES (?, 'project', ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content,
+         sourceUrl = excluded.sourceUrl, updated_at = excluded.updated_at`
+    )
+
+    let count = 0
+    const now = Date.now()
+    for (const item of body as Array<Record<string, unknown>>) {
+      if (typeof item.artifactId !== 'string' || !item.artifactId) continue
+      if (typeof item.title !== 'string') continue
+      upsert.run(
+        item.artifactId,
+        item.title,
+        typeof item.content === 'string' ? item.content : '',
+        typeof item.sourceUrl === 'string' ? item.sourceUrl : null,
+        now,
+        now
+      )
+      count++
+    }
+
+    res.json({ count })
+  })
+
   // GET /artifacts — list stored artifacts, optionally filtered by ?type=chat.
   // Used by the canvas to load existing chat threads as Thread cards on mount.
   app.get('/artifacts', requireAuth, (req: Request, res: Response) => {

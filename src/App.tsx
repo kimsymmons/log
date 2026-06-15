@@ -40,6 +40,7 @@ import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
 import { useThreadLoader } from './hooks/useThreadLoader'
 import { useIdeaLoader } from './hooks/useIdeaLoader'
+import { useProjectLoader } from './hooks/useProjectLoader'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -778,6 +779,7 @@ function CanvasOverlays() {
   useClusteringLayout(editor)
   useThreadLoader(editor)
   useIdeaLoader(editor)
+  useProjectLoader(editor)
   return (
     <>
       <FocusController />

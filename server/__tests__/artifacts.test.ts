@@ -95,3 +95,37 @@ describe('GET /artifacts', () => {
     expect(byTitle['No URL']).toBeNull()
   })
 })
+
+describe('POST /import/projects', () => {
+  const proj = (artifactId: string, title: string) => ({
+    type: 'project', artifactId, title,
+    sourceUrl: `https://linear.app/x/project/${title}`,
+    content: JSON.stringify({ id: artifactId, type: 'project', source: 'linear', title, status: 'In Progress', sourceUrl: 'u', tags: [], importedAt: 'now' }),
+  })
+
+  it('returns 401 without a token', async () => {
+    const res = await request(app).post('/import/projects').send([])
+    expect(res.status).toBe(401)
+  })
+
+  it('stores projects as type=project artifacts and lists them', async () => {
+    const res = await request(app)
+      .post('/import/projects')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send([proj('linear-a', 'Log'), proj('linear-b', 'ChatEmail')])
+    expect(res.body.count).toBe(2)
+
+    const list = await request(app).get('/artifacts?type=project').set('Authorization', `Bearer ${authToken}`)
+    expect(list.body).toHaveLength(2)
+    expect((list.body as Array<{ type: string }>).every((r) => r.type === 'project')).toBe(true)
+  })
+
+  it('upserts by artifactId (re-import updates in place, no duplicates)', async () => {
+    await request(app).post('/import/projects').set('Authorization', `Bearer ${authToken}`).send([proj('linear-a', 'Log')])
+    await request(app).post('/import/projects').set('Authorization', `Bearer ${authToken}`)
+      .send([{ ...proj('linear-a', 'Log Renamed') }])
+    const list = await request(app).get('/artifacts?type=project').set('Authorization', `Bearer ${authToken}`)
+    expect(list.body).toHaveLength(1)
+    expect((list.body as Array<{ title: string }>)[0].title).toBe('Log Renamed')
+  })
+})

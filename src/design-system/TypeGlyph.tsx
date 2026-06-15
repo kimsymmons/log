@@ -2,7 +2,7 @@ import React from 'react'
 import { Icon } from './Icon'
 
 export const typeGlyphMeta: Record<string, { icon: string; label: string; color: string }> = {
-  project: { icon: 'box', label: 'Project', color: 'var(--type-project)' },
+  project: { icon: 'box', label: 'Project', color: 'var(--accent)' },
   idea:    { icon: 'lightbulb', label: 'Idea', color: 'var(--type-idea)' },
   thread:  { icon: 'messages-square', label: 'Thread', color: 'var(--green)' },
   chat:    { icon: 'messages-square', label: 'Chat', color: 'var(--green)' },
