@@ -70,6 +70,54 @@ test.describe('canvas — shape placement and drag', () => {
     expect(movedX + movedY).toBeGreaterThan(50)
   })
 
+  test('dragging on empty canvas marquee-selects cards', async ({ page }) => {
+    // Two cards on the canvas
+    await page.keyboard.press('Meta+k')
+    await page.keyboard.type('new')
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Meta+k')
+    await page.keyboard.type('new')
+    await page.keyboard.press('Enter')
+    await expect(page.getByText('New chat')).toHaveCount(2)
+
+    const editorHandle = await page.evaluateHandle(() => window.__tldrawEditor)
+
+    // Typing "new" in the command palette leaks the `e` keystroke to tldraw's
+    // eraser shortcut, leaving the eraser tool active. Dismiss the palette and
+    // force the select tool before the marquee drag so we don't erase instead
+    // of marquee-select. (Underlying focus leak tracked separately.)
+    await page.keyboard.press('Escape')
+    await page.evaluate((editor: any) => editor.setCurrentTool('select'), editorHandle)
+    await expect
+      .poll(() => page.evaluate((editor: any) => editor.getCurrentToolId(), editorHandle))
+      .toBe('select')
+
+    // Compute a marquee that encloses every card, starting from empty space.
+    const box = await page.evaluate((editor: any) => {
+      const b = editor.getCurrentPageBounds()
+      return { minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY }
+    }, editorHandle)
+    const toScreen = async (x: number, y: number) =>
+      page.evaluate(([editor, px, py]: any) => {
+        const p = editor.pageToScreen({ x: px, y: py })
+        return { x: p.x, y: p.y }
+      }, [editorHandle, x, y] as any)
+
+    const start = await toScreen(box.minX - 40, box.minY - 40)
+    const end = await toScreen(box.maxX + 40, box.maxY + 40)
+
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(end.x, end.y, { steps: 15 })
+    await page.mouse.up()
+
+    const selectedCount = await page.evaluate(
+      (editor: any) => editor.getSelectedShapeIds().length,
+      editorHandle
+    )
+    expect(selectedCount).toBeGreaterThanOrEqual(2)
+  })
+
   test('pressing Escape with nothing selected does not crash', async ({ page }) => {
     await page.keyboard.press('Escape')
     // Canvas should still be there

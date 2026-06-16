@@ -669,6 +669,9 @@ function CanvasBackground() {
       style={{
         position: 'absolute',
         inset: 0,
+        // Must not capture pointer events, or it swallows drags on empty canvas
+        // and tldraw's select tool never starts a marquee (brush) selection.
+        pointerEvents: 'none',
         background: 'var(--bg-canvas)',
         backgroundImage:
           'radial-gradient(circle, var(--canvas-dot) var(--canvas-dot-size), transparent var(--canvas-dot-size))',
