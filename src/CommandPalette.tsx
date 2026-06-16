@@ -179,6 +179,12 @@ export function CommandPalette() {
           ref={inputRef}
           value={query}
           onChange={e => setQuery(e.target.value)}
+          // Stop keystrokes from bubbling to tldraw's global keyboard handler.
+          // The palette's own nav (Escape/Arrow/Enter) runs on a capture-phase
+          // window listener (see effect above), so it still fires; this only
+          // prevents plain character keys (typing "new" → "e"/"n") from leaking
+          // out and activating tldraw tool shortcuts (eraser, etc). [PEO-160]
+          onKeyDown={e => e.stopPropagation()}
           placeholder="Search commands…"
           style={{
             width: '100%',
