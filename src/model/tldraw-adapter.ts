@@ -14,7 +14,7 @@ import {
   type TLShapePartial,
 } from 'tldraw'
 import type { ChatCardShape } from '../shapes/ChatCard'
-import type { InkGroupNode, InkSegment, LogNode } from './nodes'
+import type { ChatNode, InkGroupNode, InkSegment, LogNode } from './nodes'
 
 function segmentBounds(segments: InkSegment[]): { w: number; h: number } {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -45,7 +45,7 @@ export function shapeToNode(shape: TLShape): LogNode | null {
   switch (shape.type) {
     case 'chat-card': {
       const s = shape as ChatCardShape
-      return {
+      const node: ChatNode = {
         ...base,
         type: 'chat',
         w: s.props.w,
@@ -53,7 +53,12 @@ export function shapeToNode(shape: TLShape): LogNode | null {
         title: s.props.title,
         body: s.props.summary,
         timestamp: new Date(s.props.createdAt).toISOString(),
+        messages: s.props.messages,
       }
+      // Only carry provenance when present, so chats without a source link
+      // round-trip cleanly (no stray undefined key).
+      if (s.props.linkedShapeId) node.linkedShapeId = s.props.linkedShapeId
+      return node
     }
     case 'draw': {
       const s = shape as TLDrawShape
@@ -85,19 +90,18 @@ export function nodeToShape(node: LogNode, pageId: TLParentId): TLShapePartial |
   }
 
   switch (node.type) {
-    case 'chat':
-      return {
-        ...base,
-        type: 'chat-card',
-        props: {
-          w: node.w,
-          h: node.h,
-          title: node.title,
-          messages: [],
-          summary: node.body,
-          createdAt: new Date(node.timestamp).getTime(),
-        },
+    case 'chat': {
+      const props: ChatCardShape['props'] = {
+        w: node.w,
+        h: node.h,
+        title: node.title,
+        messages: node.messages ?? [],
+        summary: node.body,
+        createdAt: new Date(node.timestamp).getTime(),
       }
+      if (node.linkedShapeId) props.linkedShapeId = node.linkedShapeId
+      return { ...base, type: 'chat-card', props }
+    }
     case 'ink-group': {
       const ink = node as InkGroupNode
       return {

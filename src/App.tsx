@@ -31,6 +31,7 @@ import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
 import { ConnectionLines } from './components/ConnectionLines'
+import { provenancePairs } from './canvas/provenance'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
 import { FilterProvider } from './canvas/FilterContext'
 import { FilterBarMount } from './canvas/FilterBarMount'
@@ -141,6 +142,62 @@ function TetherOverlay() {
           stroke="#aab8e0"
           strokeWidth={1.5}
           strokeDasharray="5 4"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  )
+}
+
+// ── ProvenanceOverlay (PEO-155) ──────────────────────────────────────────────
+// Draws the structural link from a source node to the chat-card spawned off it
+// via "Chat about this →" (chat.props.linkedShapeId). Distinct accent styling
+// separates it from the muted artifact tethers and the model-drawn links.
+
+function ProvenanceOverlay() {
+  const editor = useEditor()
+  const [lines, setLines] = useState<Array<{ key: string; x1: number; y1: number; x2: number; y2: number }>>([])
+
+  useEffect(() => {
+    const compute = () => {
+      const shapes = editor.getCurrentPageShapes()
+      const shapeMap = new Map(shapes.map(s => [s.id, s]))
+
+      const newLines: typeof lines = []
+      for (const { chatId, sourceId } of provenancePairs(shapes)) {
+        const chat = shapeMap.get(chatId as ChatCardShape['id'])
+        const source = shapeMap.get(sourceId as ChatCardShape['id'])
+        if (!chat || !source) continue
+
+        const chatBounds = editor.getShapePageBounds(chat)
+        const srcBounds = editor.getShapePageBounds(source)
+        if (!chatBounds || !srcBounds) continue
+
+        const p1 = editor.pageToScreen({ x: srcBounds.midX, y: srcBounds.midY })
+        const p2 = editor.pageToScreen({ x: chatBounds.midX, y: chatBounds.midY })
+        newLines.push({ key: chatId, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y })
+      }
+      setLines(newLines)
+    }
+
+    compute()
+    return editor.store.listen(compute)
+  }, [editor])
+
+  if (lines.length === 0) return null
+
+  return (
+    <svg
+      data-testid="provenance-overlay"
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}
+    >
+      {lines.map(({ key, x1, y1, x2, y2 }) => (
+        <line
+          key={key}
+          x1={x1} y1={y1} x2={x2} y2={y2}
+          stroke="var(--accent)"
+          strokeWidth={1.5}
+          strokeDasharray="2 4"
           strokeLinecap="round"
         />
       ))}
@@ -720,6 +777,7 @@ function CanvasOverlays() {
     <>
       <ConnectionLines />
       <TetherOverlay />
+      <ProvenanceOverlay />
       <LinkOverlay />
       <InkLayer
         active={inkActive}

@@ -27,11 +27,24 @@ export interface BaseNode {
   parentId: string | null
 }
 
+/** A single turn in a persisted chat conversation. Plain model type — kept here
+ *  (not imported from the shape) so the model stays free of tldraw. */
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface ChatNode extends BaseNode {
   type: 'chat'
   title: string
   body: string
   timestamp: string
+  /** Full conversation, persisted so a reload restores the chat content, not
+   *  just the summary (PEO-155). Optional for back-compat with older saves. */
+  messages?: ChatMessage[]
+  /** Canvas shape this chat was spawned from via "Chat about this"; persisted so
+   *  the provenance link survives a reload (PEO-155). Optional for back-compat. */
+  linkedShapeId?: string
 }
 
 export interface ArtifactNode extends BaseNode {
