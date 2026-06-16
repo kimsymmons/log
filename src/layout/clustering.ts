@@ -2,20 +2,42 @@ import Graph from 'graphology'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
 import type { TLShape } from 'tldraw'
 
+// The custom "Log card" shape types that participate in the clustering layout.
+// Native tldraw shapes (draw, highlight, line, geo, arrow, frame, …) must be
+// excluded: pulling a free-hand `draw` stroke toward the tag-cluster centroid
+// made ink visibly drift to the top-left after drawing.
+export const LOG_CARD_SHAPE_TYPES = new Set<string>([
+  'chat-card',
+  'markdown-artifact',
+  'code-artifact',
+  'image-artifact',
+  'musing',
+  'skill',
+  'mcp-server',
+  'gem',
+  'agent-card',
+])
+
+export function isLogCardShape(shape: { type: string }): boolean {
+  return LOG_CARD_SHAPE_TYPES.has(shape.type)
+}
+
 export function buildGraph(shapes: TLShape[]): Graph {
   const graph = new Graph({ type: 'undirected', multi: false })
+  // Only Log cards are nodes — native tldraw shapes are left untouched.
+  const cards = shapes.filter(isLogCardShape)
 
-  for (const s of shapes) {
+  for (const s of cards) {
     graph.addNode(s.id, { x: s.x, y: s.y })
   }
 
-  for (let i = 0; i < shapes.length; i++) {
-    const tagsI = ((shapes[i].props as { tags?: string[] }).tags) ?? []
-    for (let j = i + 1; j < shapes.length; j++) {
-      const tagsJ = ((shapes[j].props as { tags?: string[] }).tags) ?? []
+  for (let i = 0; i < cards.length; i++) {
+    const tagsI = ((cards[i].props as { tags?: string[] }).tags) ?? []
+    for (let j = i + 1; j < cards.length; j++) {
+      const tagsJ = ((cards[j].props as { tags?: string[] }).tags) ?? []
       const shared = tagsI.filter(t => tagsJ.includes(t)).length
       if (shared > 0) {
-        graph.addEdge(shapes[i].id, shapes[j].id, { weight: shared })
+        graph.addEdge(cards[i].id, cards[j].id, { weight: shared })
       }
     }
   }

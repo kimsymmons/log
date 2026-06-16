@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildGraph, runLayout } from './clustering'
+import { buildGraph, runLayout, isLogCardShape } from './clustering'
 
 // Minimal shape-like object — avoids importing tldraw (DOM side effects in test env)
 type ShapeLike = {
@@ -61,6 +61,32 @@ describe('buildGraph', () => {
     const graph = buildGraph([shape('a', [], 42, 99)] as never)
     expect(graph.getNodeAttribute('a', 'x')).toBe(42)
     expect(graph.getNodeAttribute('a', 'y')).toBe(99)
+  })
+
+  it('excludes native tldraw shapes (draw, geo, arrow, …) from the graph', () => {
+    const mixed = [
+      shape('card', ['x']),
+      { id: 'ink', type: 'draw', x: 0, y: 0, props: {}, meta: {} },
+      { id: 'box', type: 'geo', x: 0, y: 0, props: {}, meta: {} },
+      { id: 'line', type: 'arrow', x: 0, y: 0, props: {}, meta: {} },
+      { id: 'hl', type: 'highlight', x: 0, y: 0, props: {}, meta: {} },
+    ]
+    const graph = buildGraph(mixed as never)
+    expect(graph.order).toBe(1)
+    expect(graph.hasNode('card')).toBe(true)
+    expect(graph.hasNode('ink')).toBe(false)
+    expect(graph.hasNode('box')).toBe(false)
+  })
+
+  it('includes every custom Log card shape type', () => {
+    for (const type of [
+      'chat-card', 'markdown-artifact', 'code-artifact', 'image-artifact',
+      'musing', 'skill', 'mcp-server', 'gem', 'agent-card',
+    ]) {
+      expect(isLogCardShape({ type })).toBe(true)
+    }
+    expect(isLogCardShape({ type: 'draw' })).toBe(false)
+    expect(isLogCardShape({ type: 'geo' })).toBe(false)
   })
 })
 
