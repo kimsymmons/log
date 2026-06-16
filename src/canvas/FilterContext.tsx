@@ -1,36 +1,27 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { HTMLContainer } from 'tldraw'
+import { useFocus, isFocusDimmed } from './FocusContext'
 
 // ── Logical node-type filter keys ────────────────────────────────────────────
 //
-// These are the *logical* node types the filter bar exposes — distinct from
-// tldraw shape `type` strings. The mapping between the two lives in
-// `shapeLogicalType` below (e.g. a `chat-card` is either Project or Chat
-// depending on its tags).
+// These are the *logical* node types the filter system understands — distinct
+// from tldraw shape `type` strings. The mapping between the two lives in
+// `shapeLogicalType` below (e.g. a `chat-card` is either Project or Thread
+// depending on its tags). The filter *bar* only surfaces the five canonical
+// card types (Project · Idea · Thread · Doc · Sketch); the agent/skill/mcp/gem
+// shapes still render and still dim under an active filter, they just aren't
+// offered as filter pills.
 
 export type FilterKey =
   | 'project'
   | 'idea'
-  | 'chat'
+  | 'thread'
   | 'doc'
   | 'sketch'
   | 'agent'
   | 'skill'
   | 'mcp'
   | 'gem'
-
-/** Order shown in the filter bar (after the leading "All" pill). */
-export const FILTER_KEYS: FilterKey[] = [
-  'project',
-  'idea',
-  'chat',
-  'doc',
-  'sketch',
-  'agent',
-  'skill',
-  'mcp',
-  'gem',
-]
 
 /** Minimal shape view the filter logic needs — keeps these pure & testable. */
 export interface FilterShape {
@@ -41,12 +32,12 @@ export interface FilterShape {
 /**
  * Map a tldraw shape to its logical filter key, or null for shapes that aren't
  * filterable node types (frames, arrows, artifacts, …). A `chat-card` counts as
- * Project when tagged "project", otherwise Chat.
+ * Project when tagged "project", otherwise Thread.
  */
 export function shapeLogicalType(shape: FilterShape): FilterKey | null {
   if (shape.type === 'chat-card') {
     const tags = (shape.props?.tags ?? []) as string[]
-    return tags.includes('project') ? 'project' : 'chat'
+    return tags.includes('project') ? 'project' : 'thread'
   }
   switch (shape.type) {
     case 'musing': return 'idea'
@@ -69,16 +60,6 @@ export function isShapeDimmed(shape: FilterShape, activeTypes: Set<FilterKey>): 
   const lt = shapeLogicalType(shape)
   if (lt === null) return false
   return !activeTypes.has(lt)
-}
-
-/** Count shapes by logical type — drives the per-pill count badges. */
-export function countByLogicalType(shapes: FilterShape[]): Record<FilterKey, number> {
-  const counts = Object.fromEntries(FILTER_KEYS.map(k => [k, 0])) as Record<FilterKey, number>
-  for (const shape of shapes) {
-    const lt = shapeLogicalType(shape)
-    if (lt !== null) counts[lt] += 1
-  }
-  return counts
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -152,17 +133,25 @@ export function FilterDimContainer({
   dataShapeType,
   children,
 }: {
-  shape: FilterShape
+  shape: FilterShape & { id?: string }
   dataShapeType?: string
   children: React.ReactNode
 }) {
   const { filterActive, isDimmed } = useFilterActive()
-  const dimmed = filterActive && isDimmed(shape)
+  const { focusActive, focusedNodeId, connectedIds } = useFocus()
+
+  const filterDimmed = filterActive && isDimmed(shape)
+  const focusDimmed = focusActive && shape.id != null && isFocusDimmed(shape.id, focusedNodeId, connectedIds)
+  const dimmed = filterDimmed || focusDimmed
+  // Orbit focus dims harder (~0.12) than the type filter (0.15).
+  const opacity = focusDimmed ? 0.12 : 0.15
+
   return (
     <HTMLContainer
       data-shape-type={dataShapeType}
-      data-filter-dimmed={dimmed ? 'true' : undefined}
-      style={dimmed ? { pointerEvents: 'none', opacity: 0.15 } : { pointerEvents: 'all' }}
+      data-filter-dimmed={filterDimmed ? 'true' : undefined}
+      data-focus-dimmed={focusDimmed ? 'true' : undefined}
+      style={dimmed ? { pointerEvents: 'none', opacity } : { pointerEvents: 'all' }}
     >
       {children}
     </HTMLContainer>

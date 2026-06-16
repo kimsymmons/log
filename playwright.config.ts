@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// Frontend under test. Default to the live Vercel deployment. Override with
+// BASE_URL=http://localhost:5173 to test against the local Vite dev server.
+const baseURL = process.env.BASE_URL ?? 'https://log-five-xi.vercel.app'
+const isLocal = baseURL.includes('localhost') || baseURL.includes('127.0.0.1')
+
 export default defineConfig({
   testDir: './e2e',
   testMatch: ['e2e/**/*.spec.ts'],
@@ -10,9 +15,10 @@ export default defineConfig({
   reporter: process.env.CI
     ? [['html', { open: 'never' }], ['github']]
     : [['html', { open: 'on-failure' }]],
+  globalSetup: './e2e/global-setup.ts',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
     trace: 'on-first-retry',
@@ -25,10 +31,14 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  },
+  // Only spin up the local dev server when testing against localhost. When
+  // BASE_URL points at a remote deployment, run the specs against it directly.
+  webServer: isLocal
+    ? {
+        command: 'npm run dev',
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 30_000,
+      }
+    : undefined,
 })

@@ -94,6 +94,30 @@ describe('chat-card mapping', () => {
     expect(back).toEqual(node)
   })
 
+  it('round-trips tags and cardType when the card carries them', () => {
+    const base = makeChatShape()
+    const shape = makeChatShape({
+      props: { ...base.props, tags: ['design', 'api'], cardType: 'thread' },
+    })
+    const node = shapeToNode(shape) as ChatNode
+    expect(node.tags).toEqual(['design', 'api'])
+    expect(node.cardType).toBe('thread')
+
+    const partial = nodeToShape(node, PAGE_ID)!
+    const props = partial.props as ChatCardShape['props']
+    expect(props.tags).toEqual(['design', 'api'])
+    expect(props.cardType).toBe('thread')
+  })
+
+  it('omits tags/cardType when the card has none (keeps old records clean)', () => {
+    const node = shapeToNode(makeChatShape()) as ChatNode
+    expect(node.tags).toBeUndefined()
+    expect(node.cardType).toBeUndefined()
+    const props = nodeToShape(node, PAGE_ID)!.props as ChatCardShape['props']
+    expect(props.tags).toBeUndefined()
+    expect(props.cardType).toBeUndefined()
+  })
+
   it('preserves a non-page parent reference', () => {
     const shape = makeChatShape({ parentId: 'shape:region-1' as TLParentId })
     const node = shapeToNode(shape)!

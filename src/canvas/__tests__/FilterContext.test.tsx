@@ -4,7 +4,6 @@ import React from 'react'
 import {
   shapeLogicalType,
   isShapeDimmed,
-  countByLogicalType,
   FilterProvider,
   useFilter,
   type FilterKey,
@@ -24,10 +23,10 @@ describe('shapeLogicalType', () => {
     expect(shapeLogicalType(mk('doc'))).toBe('doc')
   })
 
-  it('distinguishes Project from Chat by the "project" tag on chat-card', () => {
+  it('distinguishes Project from Thread by the "project" tag on chat-card', () => {
     expect(shapeLogicalType(mk('chat-card', ['project']))).toBe('project')
-    expect(shapeLogicalType(mk('chat-card', ['misc']))).toBe('chat')
-    expect(shapeLogicalType(mk('chat-card'))).toBe('chat')
+    expect(shapeLogicalType(mk('chat-card', ['misc']))).toBe('thread')
+    expect(shapeLogicalType(mk('chat-card'))).toBe('thread')
   })
 
   it('returns null for non-filterable shapes', () => {
@@ -43,7 +42,7 @@ describe('isShapeDimmed', () => {
   })
 
   it('dims shapes whose logical type is not in the active set', () => {
-    const active = new Set<FilterKey>(['chat'])
+    const active = new Set<FilterKey>(['thread'])
     expect(isShapeDimmed(mk('chat-card'), active)).toBe(false)
     expect(isShapeDimmed(mk('musing'), active)).toBe(true)
     expect(isShapeDimmed(mk('chat-card', ['project']), active)).toBe(true)
@@ -57,23 +56,7 @@ describe('isShapeDimmed', () => {
   })
 
   it('never dims structural shapes even when a filter is active', () => {
-    expect(isShapeDimmed(mk('frame'), new Set<FilterKey>(['chat']))).toBe(false)
-  })
-})
-
-describe('countByLogicalType', () => {
-  it('counts shapes per logical type', () => {
-    const counts = countByLogicalType([
-      mk('chat-card'),
-      mk('chat-card', ['project']),
-      mk('chat-card'),
-      mk('musing'),
-      mk('frame'),
-    ])
-    expect(counts.chat).toBe(2)
-    expect(counts.project).toBe(1)
-    expect(counts.idea).toBe(1)
-    expect(counts.gem).toBe(0)
+    expect(isShapeDimmed(mk('frame'), new Set<FilterKey>(['thread']))).toBe(false)
   })
 })
 

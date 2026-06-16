@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from 'express'
 import Database from 'better-sqlite3'
 import { ulid } from 'ulid'
 import Anthropic from '@anthropic-ai/sdk'
+import type { MessageStreamEvent, RawContentBlockDeltaEvent, TextDelta } from '@anthropic-ai/sdk/resources/messages'
 import { getServerDb } from './db'
 import { sendMagicLink } from './email'
 import { signToken, verifyToken } from './jwt'
@@ -54,6 +55,59 @@ export type AnthropicLike = {
       usage?: { input_tokens: number; output_tokens: number }
     }>
   }
+}
+
+// ── Idea extraction (haiku) ───────────────────────────────────────────────────
+
+const EXTRACT_MODEL = 'claude-haiku-4-5-20251001'
+const EXTRACT_SYSTEM = `You analyse a single chat conversation and return STRICT JSON (no prose, no markdown) shaped:
+{"isProjectIdea": boolean, "ideaTitle": string, "ideaDescription": string, "tags": string[]}
+
+- isProjectIdea: true ONLY if the conversation is about building/making a specific tool, app, system, or project. False for general Q&A, advice, trip planning, or learning a topic.
+- ideaTitle: short noun phrase naming the idea (e.g. "Automated garden irrigation"). "" when isProjectIdea is false.
+- ideaDescription: 1-2 sentences. "" when isProjectIdea is false.
+- tags: ALWAYS 2-4 topic tags describing the conversation's subject, even when isProjectIdea is false (e.g. a Japan trip → ["japan","travel","itinerary"]; mortgages → ["mortgage","finance","interest"]). EACH tag MUST be a single lowercase English word, singular — no plurals, no contractions, no hyphens, no spaces, no digits. Good: ["irrigation","garden","sensor"]. Bad: ["auto-process","rates","i-m"].
+
+Return ONLY the JSON object.`
+
+interface ExtractResult {
+  isProjectIdea?: boolean
+  ideaTitle?: string
+  ideaDescription?: string
+  tags?: unknown[]
+}
+
+/** Flatten a stored chat (JSON message array) to plain text for the prompt. */
+function flattenThread(content: string | null): string {
+  if (!content) return ''
+  try {
+    const parsed = JSON.parse(content)
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((m: { role?: string; content?: string }) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content ?? ''}`)
+        .join('\n')
+    }
+  } catch { /* not a messages array — fall through */ }
+  return content
+}
+
+/** Tolerate ```json … ``` fences around the model's JSON. */
+function stripFences(text: string): string {
+  const m = /```(?:json)?\s*([\s\S]*?)\s*```/.exec(text)
+  return (m ? m[1] : text).trim()
+}
+
+/** Coerce an LLM tag to the canonical format: single lowercase singular word. */
+function normalizeServerTag(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const word = (raw.toLowerCase().match(/[a-z]+/g) ?? [])[0] ?? ''
+  if (word.length < 3) return ''
+  if (word.length > 4) {
+    if (word.endsWith('ies')) return word.slice(0, -3) + 'y'
+    // Leave non-plural -s words alone (canvas, status, atlas, chaos).
+    if (!/(ss|us|is|os|as)$/.test(word) && word.endsWith('s')) return word.slice(0, -1)
+  }
+  return word
 }
 
 const AUTH_RATE_WINDOW_MS = 60_000
@@ -154,6 +208,34 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     res.json({ email: user.email })
   })
 
+  // POST /auth/test-token — test-only auth bypass for the Playwright visual harness.
+  // Disabled unless TEST_BYPASS_TOKEN is set; requires a matching X-Test-Token header.
+  // Issues a real JWT for a fixed test identity so E2E specs can seed localStorage.auth_token.
+  app.post('/auth/test-token', (req: Request, res: Response) => {
+    const expected = process.env.TEST_BYPASS_TOKEN
+    if (!expected) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    if (req.headers['x-test-token'] !== expected) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    res.json({ token: signToken('test@log.local') })
+  })
+
+  // POST /auth/dev-token — frictionless local-dev auth. Mints a JWT for a fixed
+  // dev identity so `npm run dev` shows the canvas with no manual sign-in. Hard-
+  // gated to NODE_ENV === 'development' (404 in production / any other env), and
+  // the front end only calls it under import.meta.env.DEV.
+  app.post('/auth/dev-token', (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV !== 'development') {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    res.json({ token: signToken('dev@log.local') })
+  })
+
   // POST /inference — SSE streaming proxy to Anthropic
   app.post('/inference', requireAuth, async (req: Request, res: Response) => {
     const {
@@ -195,11 +277,13 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
       })
 
       for await (const event of streamResp) {
+        const streamEvent = event as MessageStreamEvent
         if (
-          event.type === 'content_block_delta' &&
-          event.delta.type === 'text_delta'
+          streamEvent.type === 'content_block_delta' &&
+          (streamEvent as RawContentBlockDeltaEvent).delta.type === 'text_delta'
         ) {
-          const text = event.delta.text
+          const textDelta = (streamEvent as RawContentBlockDeltaEvent).delta as TextDelta
+          const text = textDelta.text
           accumulatedContent += text
           res.write(`data: ${JSON.stringify({ delta: text })}\n\n`)
         }
@@ -228,7 +312,13 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
         })
         inputTokens += summaryResp.usage?.input_tokens ?? 0
         outputTokens += summaryResp.usage?.output_tokens ?? 0
-        const raw = summaryResp.content[0]?.type === 'text' ? summaryResp.content[0].text : ''
+        const contentBlock = summaryResp.content[0]
+        let raw: string
+        if (contentBlock && contentBlock.type === 'text') {
+          raw = (contentBlock as { text: string }).text
+        } else {
+          raw = ''
+        }
         const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
         const parsed = JSON.parse(jsonStr) as { title?: string; body?: string }
         summaryTitle = parsed.title ?? summaryTitle
@@ -265,7 +355,7 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
 
     const insert = db.prepare(
-      'INSERT INTO artifacts (id, type, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO artifacts (id, type, title, content, sourceUrl, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
 
     let count = 0
@@ -277,6 +367,7 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
         typeof item.type === 'string' ? item.type : 'chat',
         item.title,
         typeof item.content === 'string' ? item.content : '',
+        typeof item.sourceUrl === 'string' ? item.sourceUrl : null,
         typeof item.created_at === 'number' ? item.created_at : now,
         now
       )
@@ -284,6 +375,138 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     }
 
     res.json({ count })
+  })
+
+  // POST /extract/ideas — haiku reads each chat thread, assigns 2-4 semantic
+  // tags, and when the thread describes a project idea creates an Idea artifact
+  // (type='idea') linked back via sourceThreadId. Re-running upserts (no dupes).
+  app.post('/extract/ideas', requireAuth, async (_req: Request, res: Response) => {
+    let anthropic: AnthropicLike
+    if (anthropicOverride) {
+      anthropic = anthropicOverride
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) {
+        res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
+        return
+      }
+      anthropic = new Anthropic({ apiKey }) as unknown as AnthropicLike
+    }
+
+    const threads = db
+      .prepare("SELECT id, title, content FROM artifacts WHERE type = 'chat' ORDER BY created_at ASC")
+      .all() as Array<{ id: string; title: string; content: string | null }>
+
+    const setTags = db.prepare('UPDATE artifacts SET tags = ?, updated_at = ? WHERE id = ?')
+    const upsertIdea = db.prepare(
+      `INSERT INTO artifacts (id, type, title, content, sourceUrl, tags, created_at, updated_at)
+       VALUES (?, 'idea', ?, ?, NULL, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, tags=excluded.tags, updated_at=excluded.updated_at`
+    )
+
+    let processed = 0
+    let ideasCreated = 0
+    for (const t of threads) {
+      let parsed: ExtractResult
+      try {
+        const resp = await anthropic.messages.create({
+          model: EXTRACT_MODEL,
+          max_tokens: 400,
+          system: EXTRACT_SYSTEM,
+          messages: [{ role: 'user', content: `Title: ${t.title}\n\nConversation:\n${flattenThread(t.content)}` }],
+        })
+        const text = resp.content.map((c) => c.text ?? '').join('').trim()
+        parsed = JSON.parse(stripFences(text)) as ExtractResult
+        try {
+          const inT = resp.usage?.input_tokens ?? 0
+          const outT = resp.usage?.output_tokens ?? 0
+          db.prepare(
+            'INSERT INTO inference_log (id, feature, model, input_tokens, output_tokens, cost_usd, artifact_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+          ).run(ulid(), 'extraction', EXTRACT_MODEL, inT, outT, estimateCost(EXTRACT_MODEL, inT, outT), t.id, Date.now())
+        } catch { /* logging is non-fatal */ }
+      } catch {
+        continue // skip threads whose inference errors or returns unparseable JSON
+      }
+      processed++
+
+      const tags = Array.isArray(parsed.tags)
+        ? [...new Set(parsed.tags.map(normalizeServerTag).filter(Boolean))].slice(0, 4)
+        : []
+      const now = Date.now()
+      if (tags.length) setTags.run(JSON.stringify(tags), now, t.id)
+
+      if (parsed.isProjectIdea && typeof parsed.ideaTitle === 'string' && parsed.ideaTitle.trim()) {
+        const ideaId = `idea-${t.id}`
+        const entity = {
+          id: ideaId,
+          type: 'idea',
+          title: parsed.ideaTitle.trim(),
+          description: typeof parsed.ideaDescription === 'string' ? parsed.ideaDescription.trim() : '',
+          sourceThreadId: t.id,
+          sourceThreadTitle: t.title,
+          tags,
+          status: 'idea',
+          extractedAt: new Date(now).toISOString(),
+        }
+        upsertIdea.run(ideaId, entity.title, JSON.stringify(entity), JSON.stringify(tags), now, now)
+        ideasCreated++
+      }
+    }
+
+    res.json({ processed, ideasCreated })
+  })
+
+  // POST /import/projects — upsert normalised ProjectEntity artifacts.
+  // Body: Array<{ artifactId, title, sourceUrl, content }>. Keyed by artifactId
+  // (a sanitised "${source}:${sourceId}") so re-importing a source updates in
+  // place rather than duplicating. The full ProjectEntity JSON lives in content.
+  app.post('/import/projects', requireAuth, (req: Request, res: Response) => {
+    const body = req.body
+    if (!Array.isArray(body)) {
+      res.status(400).json({ error: 'body must be an array' })
+      return
+    }
+
+    const upsert = db.prepare(
+      `INSERT INTO artifacts (id, type, title, content, sourceUrl, created_at, updated_at)
+       VALUES (?, 'project', ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content,
+         sourceUrl = excluded.sourceUrl, updated_at = excluded.updated_at`
+    )
+
+    let count = 0
+    const now = Date.now()
+    for (const item of body as Array<Record<string, unknown>>) {
+      if (typeof item.artifactId !== 'string' || !item.artifactId) continue
+      if (typeof item.title !== 'string') continue
+      upsert.run(
+        item.artifactId,
+        item.title,
+        typeof item.content === 'string' ? item.content : '',
+        typeof item.sourceUrl === 'string' ? item.sourceUrl : null,
+        now,
+        now
+      )
+      count++
+    }
+
+    res.json({ count })
+  })
+
+  // GET /artifacts — list stored artifacts, optionally filtered by ?type=chat.
+  // Used by the canvas to load existing chat threads as Thread cards on mount.
+  app.get('/artifacts', requireAuth, (req: Request, res: Response) => {
+    const { type } = req.query as { type?: string }
+    const rows = typeof type === 'string' && type
+      ? db.prepare(
+          `SELECT id, type, title, content, sourceUrl, tags, created_at, updated_at
+           FROM artifacts WHERE type = ? ORDER BY created_at ASC`
+        ).all(type)
+      : db.prepare(
+          `SELECT id, type, title, content, sourceUrl, tags, created_at, updated_at
+           FROM artifacts ORDER BY created_at ASC`
+        ).all()
+    res.json(rows)
   })
 
   // POST /linking/run — model-drawn links for one artifact (PEO-122)

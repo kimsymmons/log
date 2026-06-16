@@ -1,42 +1,51 @@
 import React from 'react'
-import { TypeGlyph, typeGlyphMeta } from './TypeGlyph'
+import { Icon } from './Icon'
+import { typeGlyphMeta } from './TypeGlyph'
 
-/** Pill keys & order, matching the logical FilterKey set in FilterContext. */
+/**
+ * Pill keys & order — the five canonical card types per the design spec.
+ * Agent/Skill/MCP/Gem shapes still render and still dim under an active
+ * filter (see FilterContext.shapeLogicalType); they're just not offered as
+ * filter pills here.
+ */
 export const FILTER_PILLS: Array<{ key: string; label: string }> = [
   { key: 'project', label: 'Project' },
   { key: 'idea', label: 'Idea' },
-  { key: 'chat', label: 'Chat' },
+  { key: 'thread', label: 'Thread' },
   { key: 'doc', label: 'Doc' },
   { key: 'sketch', label: 'Sketch' },
-  { key: 'agent', label: 'Agent' },
-  { key: 'skill', label: 'Skill' },
-  { key: 'mcp', label: 'MCP' },
-  { key: 'gem', label: 'Gem' },
 ]
 
 interface CanvasFilterBarProps {
   /** Active type keys. Empty = "All". */
   active?: string[]
-  /** Per-type counts, keyed by pill key. */
-  counts?: Record<string, number>
   onToggle?: (key: string) => void
   onClear?: () => void
   style?: React.CSSProperties
 }
 
-export function CanvasFilterBar({ active = [], counts, onToggle, onClear, style }: CanvasFilterBarProps) {
-  const allActive = active.length === 0
+const pillBase: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  height: 28, padding: '0 11px', border: 'none', borderRadius: 'var(--radius-pill)',
+  fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)',
+  whiteSpace: 'nowrap', cursor: 'pointer', background: 'transparent', color: 'var(--text-3)',
+  transition: 'background var(--duration) var(--ease-mech), color var(--duration) var(--ease-mech), box-shadow var(--duration) var(--ease-mech)',
+}
 
-  const pill = (selected: boolean): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    height: 28, padding: '0 11px',
-    borderRadius: 'var(--radius-pill)', border: 'none',
-    background: selected ? 'var(--accent)' : 'var(--bg-raised)',
-    color: selected ? 'var(--text-on-accent)' : 'var(--text-2)',
-    fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', whiteSpace: 'nowrap',
-    cursor: 'pointer',
-    transition: 'background var(--duration) var(--ease-mech), color var(--duration) var(--ease-mech)',
-  })
+// Selected = a dark "pressed" inset (darker than the bar), subtle hairline +
+// inset shadow. NO accent fill — the accent only ever shows on the type glyph.
+function pillStyle(selected: boolean): React.CSSProperties {
+  if (!selected) return pillBase
+  return {
+    ...pillBase,
+    background: 'var(--bg-app)',
+    color: 'var(--text-1)',
+    boxShadow: 'var(--shadow-inset), inset 0 0 0 1px var(--border-1)',
+  }
+}
+
+export function CanvasFilterBar({ active = [], onToggle, onClear, style }: CanvasFilterBarProps) {
+  const allActive = active.length === 0
 
   return (
     <div
@@ -44,32 +53,35 @@ export function CanvasFilterBar({ active = [], counts, onToggle, onClear, style 
       aria-label="Filter node types"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4, padding: 5,
-        background: 'var(--bg-overlay)', border: '1px solid var(--border-1)',
+        background: 'var(--bg-raised)', border: '1px solid var(--border-1)',
         borderRadius: 'var(--radius-4)', boxShadow: 'var(--shadow-floating)',
         pointerEvents: 'all',
         ...style,
       }}
     >
-      <button type="button" aria-pressed={allActive} onClick={onClear} style={pill(allActive)}>
+      <button
+        type="button"
+        aria-pressed={allActive}
+        onClick={onClear}
+        style={{ ...pillStyle(allActive), padding: '0 12px' }}
+      >
         All
       </button>
       <span style={{ width: 1, height: 16, background: 'var(--border-1)', flexShrink: 0, margin: '0 2px' }} />
       {FILTER_PILLS.map(({ key, label }) => {
         const selected = active.includes(key)
-        const count = counts?.[key]
+        const meta = typeGlyphMeta[key] ?? typeGlyphMeta.project
         return (
           <button
             key={key}
             type="button"
             aria-pressed={selected}
             onClick={() => onToggle?.(key)}
-            style={pill(selected)}
+            style={pillStyle(selected)}
           >
-            <TypeGlyph type={typeGlyphMeta[key] ? key : 'project'} size={14} />
+            {/* glyph keeps its natural type colour when selected, greys out when not */}
+            <Icon name={meta.icon} size={14} color={selected ? meta.color : 'var(--text-3)'} />
             {label}
-            {count !== undefined && (
-              <span style={{ opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>({count})</span>
-            )}
           </button>
         )
       })}

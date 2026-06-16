@@ -2,6 +2,13 @@ export type RawConversation = {
   title: string
   created_at: string
   messages: Array<{ role: string; content: string }>
+  /** Claude conversation id (export field), used to build the source URL. */
+  uuid?: string
+}
+
+/** The claude.ai URL for a conversation, or null when it has no id. */
+export function conversationSourceUrl(conv: RawConversation): string | null {
+  return conv.uuid ? `https://claude.ai/chat/${conv.uuid}` : null
 }
 
 export type CardSeed = {

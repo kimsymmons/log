@@ -11,9 +11,11 @@ interface ButtonProps {
   loading?: boolean
   onClick?: () => void
   style?: React.CSSProperties
+  /** Toggle semantics for buttons used as on/off pills. */
+  ariaPressed?: boolean
 }
 
-export function Button({ variant = 'secondary', size = 'md', icon, children, disabled = false, loading = false, onClick, style }: ButtonProps) {
+export function Button({ variant = 'secondary', size = 'md', icon, children, disabled = false, loading = false, onClick, style, ariaPressed }: ButtonProps) {
   const [hover, setHover] = useState(false)
   const [press, setPress] = useState(false)
   const h = { sm: 'var(--control-h-sm)', md: 'var(--control-h-md)', lg: 'var(--control-h-lg)' }[size]
@@ -47,6 +49,7 @@ export function Button({ variant = 'secondary', size = 'md', icon, children, dis
     <button
       type="button"
       disabled={inert}
+      aria-pressed={ariaPressed}
       onClick={inert ? undefined : onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setPress(false) }}

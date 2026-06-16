@@ -45,6 +45,10 @@ export interface ChatNode extends BaseNode {
   /** Canvas shape this chat was spawned from via "Chat about this"; persisted so
    *  the provenance link survives a reload (PEO-155). Optional for back-compat. */
   linkedShapeId?: string
+  /** User-assigned tags (drive connections + colour). Optional for back-compat. */
+  tags?: string[]
+  /** Card type glyph discriminator, e.g. 'thread'. Optional for back-compat. */
+  cardType?: string
 }
 
 export interface ArtifactNode extends BaseNode {

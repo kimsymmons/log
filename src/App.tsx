@@ -1,14 +1,17 @@
 import 'tldraw/tldraw.css'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Button, CanvasToolbar } from './design-system'
+import { Button, CanvasToolbar, CanvasFilterBar, IconButton, ToolButton, Icon } from './design-system'
 import {
   Tldraw,
   useEditor,
-  DefaultToolbar,
-  DefaultToolbarContent,
+  useValue,
+  DefaultColorStyle,
+  DefaultSizeStyle,
   type Editor,
   type TLShapePartial,
   type TLFrameShape,
+  type TLDefaultColorStyle,
+  type TLDefaultSizeStyle,
 } from 'tldraw'
 import { ChatCardShapeUtil, COLLAPSED_SIZE, type ChatCardShape } from './shapes/ChatCard'
 import {
@@ -23,18 +26,23 @@ import { SkillShapeUtil, DEFAULT_SKILL_SIZE, type SkillShape } from './shapes/Sk
 import { McpServerShapeUtil, DEFAULT_MCP_SIZE, type McpServerShape } from './shapes/McpServerShape'
 import { GemShapeUtil, DEFAULT_GEM_SIZE, type GemShape } from './shapes/GemShape'
 import { AgentCardShapeUtil, DEFAULT_AGENT_CARD_SIZE, type AgentCardShape } from './shapes/AgentCardShape'
-import { parseConversations, conversationToCardSeed } from './lib/importChats'
+import { parseConversations, conversationToCardSeed, conversationSourceUrl } from './lib/importChats'
 import { shapeToNode, nodeToShape } from './model/tldraw-adapter'
 import { createLocalNodeStore } from './persistence/local'
 import type { LogNode } from './model/nodes'
-import { linkDisplayProps } from './canvas/linkDisplay'
 import { InkLayer, useInkStrokes } from './ink/InkLayer'
 import { CommandPalette, CommandPaletteContext } from './CommandPalette'
-import { ConnectionLines } from './components/ConnectionLines'
-import { provenancePairs } from './canvas/provenance'
 import { useClusteringLayout } from './hooks/useClusteringLayout'
-import { FilterProvider } from './canvas/FilterContext'
-import { FilterBarMount } from './canvas/FilterBarMount'
+import { FilterProvider, useFilter, type FilterKey } from './canvas/FilterContext'
+import { TagFocusProvider } from './canvas/TagFocusContext'
+import { FocusProvider, useFocus } from './canvas/FocusContext'
+import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
+import { PropertiesPanel } from './canvas/PropertiesPanel'
+import { gridSpacing } from './canvas/gridSpacing'
+import { useThreadLoader } from './hooks/useThreadLoader'
+import { useIdeaLoader } from './hooks/useIdeaLoader'
+import { useProjectLoader } from './hooks/useProjectLoader'
+import { provenancePairs } from './canvas/provenance'
 import { ChatPanelProvider } from './canvas/ChatPanelContext'
 import { ChatContextMenu } from './canvas/ChatContextMenu'
 import { ChatPanel } from './components/ChatPanel'
@@ -139,7 +147,7 @@ function TetherOverlay() {
         <line
           key={key}
           x1={x1} y1={y1} x2={x2} y2={y2}
-          stroke="#aab8e0"
+          style={{ stroke: 'var(--border-3)' }}
           strokeWidth={1.5}
           strokeDasharray="5 4"
           strokeLinecap="round"
@@ -151,8 +159,8 @@ function TetherOverlay() {
 
 // ── ProvenanceOverlay (PEO-155) ──────────────────────────────────────────────
 // Draws the structural link from a source node to the chat-card spawned off it
-// via "Chat about this →" (chat.props.linkedShapeId). Distinct accent styling
-// separates it from the muted artifact tethers and the model-drawn links.
+// via "Chat about this →" (chat.props.linkedShapeId). Accent styling separates
+// it from the muted artifact tethers and the tag-connection lines.
 
 function ProvenanceOverlay() {
   const editor = useEditor()
@@ -195,7 +203,7 @@ function ProvenanceOverlay() {
         <line
           key={key}
           x1={x1} y1={y1} x2={x2} y2={y2}
-          stroke="var(--accent)"
+          style={{ stroke: 'var(--accent)' }}
           strokeWidth={1.5}
           strokeDasharray="2 4"
           strokeLinecap="round"
@@ -205,189 +213,11 @@ function ProvenanceOverlay() {
   )
 }
 
-// ── LinkOverlay (PEO-123) ────────────────────────────────────────────────────
-
-interface ArtifactLink {
-  id: string
-  source_id: string
-  target_id: string
-  strength: number
-  provenance: string
-  rationale: string | null
-}
-
-interface LinkPopover {
-  linkId: string
-  x: number
-  y: number
-}
-
-const API_BASE = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
-const AUTH_TOKEN = () => localStorage.getItem('auth_token') ?? ''
-
-async function fetchLinksForShape(shapeId: string): Promise<ArtifactLink[]> {
-  try {
-    const res = await fetch(`${API_BASE}/links?artifactId=${encodeURIComponent(shapeId)}`, {
-      headers: AUTH_TOKEN() ? { Authorization: `Bearer ${AUTH_TOKEN()}` } : {},
-    })
-    if (!res.ok) return []
-    return (await res.json()) as ArtifactLink[]
-  } catch {
-    return []
-  }
-}
-
-function LinkOverlay() {
-  const editor = useEditor()
-  const [links, setLinks] = useState<ArtifactLink[]>([])
-  const [lines, setLines] = useState<Array<{
-    key: string
-    x1: number; y1: number; x2: number; y2: number
-    link: ArtifactLink
-  }>>([])
-  const [popover, setPopover] = useState<LinkPopover | null>(null)
-
-  const fetchAllLinks = useCallback(async () => {
-    const shapes = editor.getCurrentPageShapes()
-    const chatCards = shapes.filter(s => s.type === 'chat-card') as ChatCardShape[]
-    const ids = chatCards.map(c => c.id)
-
-    const batches = await Promise.all(ids.map(fetchLinksForShape))
-    const seen = new Set<string>()
-    const all: ArtifactLink[] = []
-    for (const batch of batches) {
-      for (const link of batch) {
-        if (!seen.has(link.id)) { seen.add(link.id); all.push(link) }
-      }
-    }
-    setLinks(all)
-  }, [editor])
-
-  useEffect(() => {
-    void fetchAllLinks()
-    const interval = setInterval(() => { void fetchAllLinks() }, 30_000)
-    return () => clearInterval(interval)
-  }, [fetchAllLinks])
-
-  useEffect(() => {
-    const compute = () => {
-      const shapes = editor.getCurrentPageShapes()
-      const shapeMap = new Map(shapes.map(s => [s.id, s]))
-
-      const newLines: typeof lines = []
-      for (const link of links) {
-        const src = shapeMap.get(link.source_id as ChatCardShape['id'])
-        const tgt = shapeMap.get(link.target_id as ChatCardShape['id'])
-        if (!src || !tgt) continue
-
-        const display = linkDisplayProps(link.strength, link.provenance)
-        if (!display.visible) continue
-
-        const srcBounds = editor.getShapePageBounds(src)
-        const tgtBounds = editor.getShapePageBounds(tgt)
-        if (!srcBounds || !tgtBounds) continue
-
-        const p1 = editor.pageToScreen({ x: srcBounds.midX, y: srcBounds.midY })
-        const p2 = editor.pageToScreen({ x: tgtBounds.midX, y: tgtBounds.midY })
-        newLines.push({ key: link.id, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, link })
-      }
-      setLines(newLines)
-    }
-
-    compute()
-    return editor.store.listen(compute)
-  }, [editor, links])
-
-  const handleLineClick = useCallback((e: React.MouseEvent, linkId: string) => {
-    e.stopPropagation()
-    setPopover(p => p?.linkId === linkId ? null : { linkId, x: e.clientX, y: e.clientY })
-  }, [])
-
-  const handleTrustAction = useCallback(async (linkId: string, action: 'keep' | 'dismiss' | 'remove') => {
-    setPopover(null)
-    const token = AUTH_TOKEN()
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers.Authorization = `Bearer ${token}`
-
-    if (action === 'remove') {
-      await fetch(`${API_BASE}/links/${linkId}`, { method: 'DELETE', headers }).catch(() => {})
-    } else {
-      const provenance = action === 'keep' ? 'user-pinned' : 'dismissed'
-      await fetch(`${API_BASE}/links/${linkId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ provenance }),
-      }).catch(() => {})
-    }
-    void fetchAllLinks()
-  }, [fetchAllLinks])
-
-  if (lines.length === 0 && !popover) return null
-
-  return (
-    <>
-      <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}>
-        {lines.map(({ key, x1, y1, x2, y2, link }) => {
-          const display = linkDisplayProps(link.strength, link.provenance)
-          return (
-            <g
-              key={key}
-              style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-              onClick={(e) => handleLineClick(e, link.id)}
-            >
-              {link.rationale && <title>{link.rationale}</title>}
-              <line
-                x1={x1} y1={y1} x2={x2} y2={y2}
-                stroke="#6a9fd8"
-                strokeWidth={display.strokeWidth}
-                strokeOpacity={display.opacity}
-                strokeDasharray={display.strokeDasharray === 'none' ? undefined : display.strokeDasharray}
-                strokeLinecap="round"
-              />
-            </g>
-          )
-        })}
-      </svg>
-      {popover && (
-        <div
-          style={{
-            position: 'fixed',
-            left: popover.x,
-            top: popover.y,
-            zIndex: 10000,
-            background: 'var(--bg-overlay)',
-            border: '1px solid var(--border-1)',
-            borderRadius: 'var(--radius-3)',
-            boxShadow: 'var(--shadow-menu)',
-            padding: '6px 4px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-            minWidth: 90,
-            fontFamily: 'var(--font-ui)',
-            fontSize: 'var(--text-xs)',
-          }}
-        >
-          <button style={popoverBtnStyle} onClick={() => { void handleTrustAction(popover.linkId, 'keep') }}>Keep</button>
-          <button style={popoverBtnStyle} onClick={() => { void handleTrustAction(popover.linkId, 'dismiss') }}>Dismiss</button>
-          <button style={{ ...popoverBtnStyle, color: 'var(--red)' }} onClick={() => { void handleTrustAction(popover.linkId, 'remove') }}>Remove</button>
-        </div>
-      )}
-    </>
-  )
-}
-
-const popoverBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: '1px solid var(--border-1)',
-  borderRadius: 'var(--radius-1)',
-  padding: '4px 8px',
-  cursor: 'pointer',
-  textAlign: 'left',
-  fontFamily: 'var(--font-ui)',
-  fontSize: 'var(--text-xs)',
-  color: 'var(--text-1)',
-}
+// Canvas connection lines are tag-derived — see TagConnectionOverlay. The
+// model-drawn /links feature (with its trust-curation popover) was removed
+// from the canvas: connections must derive from shared tags, never be
+// fetched, stored, or hand-curated. The /links server endpoints remain for
+// the separate AI-link feature.
 
 // ── MinimalToolbar (PEO-120) ─────────────────────────────────────────────────
 
@@ -399,18 +229,121 @@ type ClusterSuggestion = {
   confidence: number
 }
 
-function MinimalToolbar() {
+// Shared floating-surface style for the toolbars (matches the design spec).
+const floatingSurface: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: 4,
+  borderRadius: 'var(--radius-4)', background: 'var(--bg-raised)',
+  border: '1px solid var(--border-1)', boxShadow: 'var(--shadow-floating)',
+}
+
+const ToolbarDivider = () => (
+  <span style={{ width: 1, height: 24, background: 'var(--border-1)', margin: '0 2px', flexShrink: 0 }} />
+)
+
+// Draw-family tool ids that show the ink sub-toolbar.
+const INK_TOOLS = ['draw', 'highlight', 'eraser']
+
+// Ink palette — maps each design swatch (a token, for display) to tldraw's
+// DefaultColorStyle value, so drawing uses native tldraw shapes/styles.
+const INK_COLORS: Array<{ name: string; value: TLDefaultColorStyle; swatch: string }> = [
+  { name: 'White', value: 'white', swatch: 'var(--text-1)' },
+  { name: 'Indigo', value: 'violet', swatch: 'var(--accent)' },
+  { name: 'Yellow', value: 'yellow', swatch: 'var(--yellow)' },
+  { name: 'Green', value: 'green', swatch: 'var(--green)' },
+  { name: 'Blue', value: 'light-blue', swatch: 'var(--blue)' },
+  { name: 'Lavender', value: 'light-violet', swatch: 'var(--purple)' },
+  { name: 'Pink', value: 'light-red', swatch: 'var(--sticky-pink-text)' },
+  { name: 'Red', value: 'red', swatch: 'var(--red)' },
+]
+const INK_WEIGHTS: Array<{ name: string; value: TLDefaultSizeStyle; dot: number }> = [
+  { name: 'Thin', value: 's', dot: 4 },
+  { name: 'Medium', value: 'm', dot: 7 },
+  { name: 'Thick', value: 'l', dot: 11 },
+]
+
+// Secondary ink toolbar — mounted only while a draw-family tool is active.
+// Drives tldraw's native draw / highlight / eraser tools and shared styles
+// (no custom canvas layer, so undo/redo + selection stay consistent).
+function InkSubToolbar() {
+  const editor = useEditor()
+  const toolId = useValue('ink tool', () => editor.getCurrentToolId(), [editor])
+  const styles = useValue('ink styles', () => editor.getInstanceState().stylesForNextShape as Record<string, unknown>, [editor])
+  const activeColor = styles?.[DefaultColorStyle.id]
+  const activeSize = styles?.[DefaultSizeStyle.id] ?? 'm'
+  return (
+    <div
+      data-testid="ink-subtoolbar"
+      role="toolbar"
+      aria-label="Ink tools"
+      style={{
+        position: 'absolute', bottom: 72, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 20, pointerEvents: 'all', ...floatingSurface,
+      }}
+    >
+      <ToolButton icon="pen-line" label="Pen" active={toolId === 'draw'} onClick={() => editor.setCurrentTool('draw')} />
+      <ToolButton icon="highlighter" label="Highlighter" active={toolId === 'highlight'} onClick={() => editor.setCurrentTool('highlight')} />
+      <ToolButton icon="eraser" label="Eraser" active={toolId === 'eraser'} onClick={() => editor.setCurrentTool('eraser')} />
+      <ToolbarDivider />
+      {INK_WEIGHTS.map((w) => {
+        const sel = activeSize === w.value
+        return (
+          <button
+            key={w.name} type="button" aria-label={`${w.name} weight`} aria-pressed={sel}
+            onClick={() => editor.setStyleForNextShapes(DefaultSizeStyle, w.value)}
+            style={{
+              width: 28, height: 28, border: 'none', borderRadius: 'var(--radius-2)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: sel ? 'var(--bg-app)' : 'transparent',
+              boxShadow: sel ? 'var(--shadow-inset), inset 0 0 0 1px var(--border-1)' : 'none',
+            }}
+          >
+            <span style={{ width: w.dot, height: w.dot, borderRadius: 'var(--radius-pill)', background: sel ? 'var(--text-1)' : 'var(--text-3)' }} />
+          </button>
+        )
+      })}
+      <ToolbarDivider />
+      {INK_COLORS.map((c) => {
+        const selected = activeColor === c.value
+        return (
+          <button
+            key={c.name} type="button" aria-label={c.name} aria-pressed={selected}
+            onClick={() => editor.setStyleForNextShapes(DefaultColorStyle, c.value)}
+            style={{
+              width: 24, height: 24, padding: 0, border: 'none', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent',
+              boxShadow: selected ? '0 0 0 2px var(--bg-raised), 0 0 0 3px var(--text-1)' : 'none',
+            }}
+          >
+            <span style={{ width: 16, height: 16, borderRadius: 'var(--radius-pill)', background: c.swatch, border: '1px solid var(--border-2)' }} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Custom floating toolbar (bottom-centre) — replaces tldraw's default toolbar.
+function CustomToolbar() {
   const editor = useEditor()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const { inkActive, eraserActive, setInkActive, setEraserActive } = React.useContext(InkContext)
   const { registerImport, registerGroupClusters } = React.useContext(CommandPaletteContext)
+  const currentTool = useValue('current tool', () => editor.getCurrentToolId(), [editor])
+  const inkToolActive = INK_TOOLS.includes(currentTool)
 
-  const handleInkToggle = useCallback(() => {
-    const next = !inkActive
-    setInkActive(next)
-    editor.setCurrentTool(next ? 'draw' : 'select')
-  }, [inkActive, setInkActive, editor])
+  const pickTool = useCallback((id: string) => { editor.setCurrentTool(id) }, [editor])
+  const isTool = (id: string) => currentTool === id
+
+  // Ink button toggles tldraw's native draw tool. Default to white ink so it's
+  // visible on the dark canvas; pen/colour/weight then live in the sub-toolbar.
+  const handleInk = useCallback(() => {
+    if (INK_TOOLS.includes(editor.getCurrentToolId())) { editor.setCurrentTool('select'); return }
+    editor.setStyleForNextShapes(DefaultColorStyle, 'white')
+    editor.setCurrentTool('draw')
+  }, [editor])
+  // Placeholder tools (Tag/Doc/Mic/Chat/Add) have no behaviour yet, but still
+  // dismiss the ink sub-toolbar like any other main-toolbar button.
+  const dismissInk = useCallback(() => { if (INK_TOOLS.includes(editor.getCurrentToolId())) editor.setCurrentTool('select') }, [editor])
 
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -468,6 +401,7 @@ function MinimalToolbar() {
           type: 'chat',
           title: conv.title,
           content: JSON.stringify(conv.messages),
+          sourceUrl: conversationSourceUrl(conv),
           created_at: new Date(conv.created_at).getTime() || Date.now(),
         }))
       ),
@@ -552,45 +486,30 @@ function MinimalToolbar() {
 
   return (
     <>
-      <DefaultToolbar>
-        <DefaultToolbarContent />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          style={{ display: 'none' }}
-          onChange={e => { void handleImport(e) }}
-        />
-        <Button onClick={() => fileInputRef.current?.click()} size="sm">
-          Import chats
-        </Button>
-        <Button onClick={() => { void handleGroupClusters() }} size="sm">
-          Group clusters
-        </Button>
-        <Button
-          onClick={handleInkToggle}
-          variant={inkActive ? 'primary' : 'secondary'}
-          size="sm"
-          icon="pen-line"
-        >
-          Ink
-        </Button>
-        {inkActive && (
-          <Button
-            onClick={() => setEraserActive(!eraserActive)}
-            variant={eraserActive ? 'danger' : 'secondary'}
-            size="sm"
-            icon="eraser"
-          >
-            Eraser
-          </Button>
-        )}
-      </DefaultToolbar>
+      <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={e => { void handleImport(e) }} />
+      {inkToolActive && <InkSubToolbar />}
+      <div data-testid="canvas-toolbar" style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all' }}>
+        <div role="toolbar" aria-label="Canvas tools" style={floatingSurface}>
+          <ToolButton icon="mouse-pointer-2" label="Select" keys="V" active={isTool('select')} onClick={() => pickTool('select')} />
+          <ToolButton icon="hand" label="Pan" keys="H" active={isTool('hand')} onClick={() => pickTool('hand')} />
+          <ToolbarDivider />
+          <ToolButton icon="pen-line" label="Ink" keys="I" active={inkToolActive} onClick={handleInk} />
+          <ToolButton icon="square" label="Rectangle" keys="R" active={isTool('geo')} onClick={() => pickTool('geo')} />
+          <ToolButton icon="tag" label="Tag" onClick={dismissInk} />
+          <ToolButton icon="file-text" label="Doc" onClick={dismissInk} />
+          <ToolButton icon="type" label="Text" keys="T" active={isTool('text')} onClick={() => pickTool('text')} />
+          <ToolbarDivider />
+          <ToolButton icon="mic" label="Mic" onClick={dismissInk} />
+          <ToolButton icon="message-circle" label="Chat" onClick={dismissInk} />
+          <ToolbarDivider />
+          <ToolButton icon="plus" label="Add" onClick={dismissInk} />
+        </div>
+      </div>
       {toast && (
         <div
           style={{
-            position: 'fixed',
-            bottom: 20,
+            position: 'absolute',
+            bottom: 72,
             left: '50%',
             transform: 'translateX(-50%)',
             background: 'var(--bg-overlay)',
@@ -602,7 +521,7 @@ function MinimalToolbar() {
             fontSize: 'var(--text-sm)',
             fontFamily: 'var(--font-ui)',
             pointerEvents: 'none',
-            zIndex: 10000,
+            zIndex: 21,
           }}
         >
           {toast}
@@ -621,6 +540,9 @@ import { InkContext } from './ink/InkContext'
 function GlobalKeyboardShortcuts() {
   const editor = useEditor()
   const { open: paletteOpen } = React.useContext(CommandPaletteContext)
+  const { clearFocus } = useFocus()
+  // Tracks hold-space-to-pan: whether space is held and the tool to restore.
+  const panRef = useRef<{ down: boolean; prev: string | null }>({ down: false, prev: null })
 
   useEffect(() => {
     const isTyping = (e: KeyboardEvent) => {
@@ -638,6 +560,7 @@ function GlobalKeyboardShortcuts() {
 
       switch (e.key) {
         case 'Escape':
+          clearFocus()
           editor.selectNone()
           break
         case 'Delete':
@@ -647,8 +570,17 @@ function GlobalKeyboardShortcuts() {
           break
         }
         case ' ': {
+          // Hold space → temporary pan (hand tool); release restores the prior
+          // tool. Guarded against key-repeat so holding doesn't flip-flop.
           e.preventDefault()
-          editor.setCurrentTool(editor.getCurrentToolId() === 'hand' ? 'select' : 'hand')
+          if (!panRef.current.down) {
+            panRef.current.down = true
+            const cur = editor.getCurrentToolId()
+            if (cur !== 'hand') {
+              panRef.current.prev = cur
+              editor.setCurrentTool('hand')
+            }
+          }
           break
         }
         case 'f':
@@ -760,38 +692,216 @@ function GlobalKeyboardShortcuts() {
       }
     }
 
+    // Release space → restore the tool we were on before the temporary pan.
+    const upHandler = (e: KeyboardEvent) => {
+      if (e.key === ' ' && panRef.current.down) {
+        panRef.current.down = false
+        const prev = panRef.current.prev
+        panRef.current.prev = null
+        editor.setCurrentTool(prev ?? 'select')
+      }
+    }
+
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [editor, paletteOpen])
+    window.addEventListener('keyup', upHandler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('keyup', upHandler)
+    }
+  }, [editor, paletteOpen, clearFocus])
 
   return null
 }
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
+// Dot-grid canvas background (P2). Tied to tldraw's camera: the pattern offsets
+// with pan so the grid tracks content, but the gap cycles through discrete
+// spacing levels (Figma/FigJam style) rather than scaling linearly with zoom —
+// so dots never crowd into a smear or drift impossibly far apart. The dot size
+// itself stays fixed at --canvas-dot-size. See ./canvas/gridSpacing.
+function CanvasBackground() {
+  const editor = useEditor()
+  const camera = useValue('camera', () => editor.getCamera(), [editor])
+  const gap = gridSpacing(camera.z) * camera.z
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        // Must not capture pointer events, or it swallows drags on empty canvas
+        // and tldraw's select tool never starts a marquee (brush) selection.
+        pointerEvents: 'none',
+        background: 'var(--bg-canvas)',
+        backgroundImage:
+          'radial-gradient(circle, var(--canvas-dot) var(--canvas-dot-size), transparent var(--canvas-dot-size))',
+        backgroundSize: `${gap}px ${gap}px`,
+        backgroundPosition: `${camera.x}px ${camera.y}px`,
+      }}
+    />
+  )
+}
+
+// 56px head nav — board-title pill + avatar. Lives in the app shell, above
+// the canvas panel.
+function NavBar() {
+  return (
+    <div
+      style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 56, zIndex: 30,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 16px', background: 'var(--bg-app)', pointerEvents: 'all',
+      }}
+    >
+      <div
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          height: 36, padding: '0 14px',
+          background: 'var(--bg-sidebar)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-4)',
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-1)',
+        }}
+      >
+        <Icon name="layout-grid" size={14} color="var(--text-3)" />
+        log canvas
+      </div>
+      <div
+        aria-label="Account"
+        style={{
+          width: 28, height: 28, borderRadius: 'var(--radius-pill)',
+          background: 'var(--accent)', color: 'var(--text-on-accent)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font-ui)', fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)',
+        }}
+      >
+        K
+      </div>
+    </div>
+  )
+}
+
+// Floating type filter — top-centre, 16px from top.
+function FilterBarOverlay() {
+  const { activeTypes, toggleType, clearTypes } = useFilter()
+  return (
+    <div data-testid="filter-bar" style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'all' }}>
+      <CanvasFilterBar active={[...activeTypes]} onToggle={(k) => toggleType(k as FilterKey)} onClear={clearTypes} />
+    </div>
+  )
+}
+
+// Custom zoom pill — bottom-left, 16px. Mono / tabular-nums per the spec.
+function ZoomPill() {
+  const editor = useEditor()
+  const zoom = useValue('zoom', () => editor.getZoomLevel(), [editor])
+  return (
+    <div
+      data-testid="zoom-pill"
+      style={{
+        position: 'absolute', bottom: 16, left: 16, zIndex: 20, pointerEvents: 'all',
+        display: 'inline-flex', alignItems: 'center', gap: 2, padding: 2,
+        background: 'var(--bg-raised)', border: '1px solid var(--border-1)',
+        borderRadius: 'var(--radius-3)', boxShadow: 'var(--shadow-floating)',
+      }}
+    >
+      <IconButton icon="minus" label="Zoom out" size="sm" onClick={() => editor.zoomOut()} />
+      <button
+        type="button"
+        onClick={() => editor.resetZoom()}
+        aria-label="Reset zoom"
+        style={{
+          minWidth: 48, height: 24, padding: '0 6px', border: 'none', background: 'transparent', cursor: 'pointer',
+          fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <IconButton icon="plus" label="Zoom in" size="sm" onClick={() => editor.zoomIn()} />
+    </div>
+  )
+}
+
+// Exits orbit/focus mode when the canvas background is clicked (clicks that
+// fall through dimmed cards count as background too). Only listens while focused.
+function FocusController() {
+  const editor = useEditor()
+  const { focusActive, clearFocus } = useFocus()
+  useEffect(() => {
+    if (!focusActive) return
+    const handler = (info: { name?: string; target?: string }) => {
+      if (info.name === 'pointer_down' && info.target === 'canvas') clearFocus()
+    }
+    editor.on('event', handler)
+    return () => { editor.off('event', handler) }
+  }, [editor, focusActive, clearFocus])
+  return null
+}
+
 function CanvasOverlays() {
   const editor = useEditor()
-  const { inkActive, eraserActive, strokes, setStrokes } = React.useContext(InkContext)
+  const { strokes, setStrokes } = React.useContext(InkContext)
   useClusteringLayout(editor)
+  useThreadLoader(editor)
+  useIdeaLoader(editor)
+  useProjectLoader(editor)
   return (
     <>
-      <ConnectionLines />
+      <FocusController />
+      <TagConnectionOverlay />
       <TetherOverlay />
       <ProvenanceOverlay />
-      <LinkOverlay />
+      {/* Legacy ink strokes render read-only; new ink uses tldraw's draw tool. */}
       <InkLayer
-        active={inkActive}
-        eraserActive={eraserActive}
+        active={false}
+        eraserActive={false}
         strokes={strokes}
         onStrokesChange={setStrokes}
       />
+      <FilterBarOverlay />
+      <CustomToolbar />
+      <ZoomPill />
+      <PropertiesPanel />
       <CommandPalette />
       <GlobalKeyboardShortcuts />
     </>
   )
 }
 
+// In dev, auto-mint an auth token so `npm run dev` shows the canvas with no
+// manual sign-in. No-op in production builds (import.meta.env.DEV is false) and
+// when a token already exists. Blocks the first render until the token is set so
+// the canvas loaders fetch authenticated.
+function useDevAuth(): boolean {
+  // Skip under automation (navigator.webdriver) so Playwright specs keep their
+  // unauthenticated/empty-canvas starting state and control auth themselves.
+  const [ready, setReady] = useState(
+    () =>
+      !import.meta.env.DEV ||
+      (typeof navigator !== 'undefined' && navigator.webdriver) ||
+      Boolean(localStorage.getItem('auth_token')),
+  )
+  useEffect(() => {
+    if (ready) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const apiBase = (import.meta.env as Record<string, string>).VITE_API_URL ?? 'http://localhost:3001'
+        const res = await fetch(`${apiBase}/auth/dev-token`, { method: 'POST' })
+        if (res.ok) {
+          const { token } = (await res.json()) as { token?: string }
+          if (token) localStorage.setItem('auth_token', token)
+        }
+      } catch {
+        // backend down or not in dev — the canvas just renders unauthenticated
+      }
+      if (!cancelled) setReady(true)
+    })()
+    return () => { cancelled = true }
+  }, [ready])
+  return ready
+}
+
 export default function App() {
+  const authReady = useDevAuth()
   const [inkActive, setInkActiveRaw] = useState(false)
   const [eraserActive, setEraserActive] = useState(false)
   const { strokes, setStrokes } = useInkStrokes()
@@ -800,6 +910,10 @@ export default function App() {
     setInkActiveRaw(v)
     if (!v) setEraserActive(false)
   }, [])
+
+  const inkCtx = React.useMemo(() => ({
+    inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes,
+  }), [inkActive, eraserActive, strokes, setInkActive, setStrokes])
 
   // ── Command palette state ──
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -835,36 +949,74 @@ export default function App() {
     registerGroupClusters,
   }), [paletteOpen, paletteQuery, onImport, onGroupClusters, registerImport, registerGroupClusters])
 
+  // Custom chrome only: every default tldraw UI slot is nulled out. The dot-grid
+  // Background and the InFrontOfTheCanvas overlay layer (nav-less; the nav lives
+  // in the app shell) are the only slots we keep.
   const components = React.useMemo(() => ({
     InFrontOfTheCanvas: CanvasOverlays,
-    Toolbar: MinimalToolbar,
-    TopPanel: FilterBarMount,
+    Background: CanvasBackground,
     ContextMenu: ChatContextMenu,
+    Toolbar: null,
+    StylePanel: null,
     PageMenu: null,
+    MainMenu: null,
+    ZoomMenu: null,
+    HelpMenu: null,
+    NavigationPanel: null,
+    Minimap: null,
+    QuickActions: null,
+    ActionsMenu: null,
+    DebugMenu: null,
+    SharePanel: null,
+    MenuPanel: null,
+    TopPanel: null,
   }), [])
 
   const options = React.useMemo(() => ({ maxPages: 1 }), [])
 
+  // Hold render until the dev token is minted (dev only) so loaders are authed.
+  if (!authReady) return <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)' }} />
+
   return (
     <ChatPanelProvider>
-      <CommandPaletteContext.Provider value={paletteCtx}>
-        <InkContext.Provider value={{ inkActive, eraserActive, strokes, setInkActive, setEraserActive, setStrokes }}>
-          <FilterProvider>
-            <div style={{ position: 'fixed', inset: 0 }}>
-              <Tldraw
-                shapeUtils={shapeUtils}
-                onMount={(editor) => {
-                  window.__tldrawEditor = editor
-                  return setupPersistence(editor)
+    <FilterProvider>
+      <TagFocusProvider>
+        <FocusProvider>
+        <CommandPaletteContext.Provider value={paletteCtx}>
+          <InkContext.Provider value={inkCtx}>
+            {/* App shell — deepest backdrop */}
+            <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)', overflow: 'hidden' }}>
+              <NavBar />
+              {/* Canvas panel — inset below the 56px nav, hairline-framed, dot-grid surface.
+                  16px sides/bottom to match the nav's 16px horizontal padding. */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '56px 16px 16px',
+                  border: '1px solid var(--border-2)',
+                  borderRadius: 'var(--radius-4)',
+                  boxShadow: 'var(--shadow-canvas)',
+                  overflow: 'hidden',
+                  background: 'var(--bg-canvas)',
                 }}
-                components={components}
-                options={options}
-              />
+              >
+                <Tldraw
+                  shapeUtils={shapeUtils}
+                  onMount={(editor) => {
+                    window.__tldrawEditor = editor
+                    return setupPersistence(editor)
+                  }}
+                  components={components}
+                  options={options}
+                />
+              </div>
             </div>
-          </FilterProvider>
-        </InkContext.Provider>
-      </CommandPaletteContext.Provider>
-      <ChatPanel />
+          </InkContext.Provider>
+        </CommandPaletteContext.Provider>
+        </FocusProvider>
+      </TagFocusProvider>
+    </FilterProvider>
+    <ChatPanel />
     </ChatPanelProvider>
   )
 }

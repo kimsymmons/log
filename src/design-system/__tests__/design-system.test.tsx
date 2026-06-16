@@ -115,10 +115,14 @@ describe('Button', () => {
 })
 
 describe('CanvasFilterBar', () => {
-  it('renders All pill and every node-type pill', () => {
+  it('renders All plus the five canonical card-type pills and nothing else', () => {
     render(<CanvasFilterBar />)
-    for (const label of ['All', 'Project', 'Idea', 'Chat', 'Doc', 'Sketch', 'Agent', 'Skill', 'MCP', 'Gem']) {
+    for (const label of ['All', 'Project', 'Idea', 'Thread', 'Doc', 'Sketch']) {
       expect(screen.getByText(label)).toBeTruthy()
+    }
+    // Agent/Skill/MCP/Gem shapes still render but are not filter pills.
+    for (const label of ['Chat', 'Agent', 'Skill', 'MCP', 'Gem']) {
+      expect(screen.queryByText(label)).toBeNull()
     }
   })
 
@@ -136,10 +140,19 @@ describe('CanvasFilterBar', () => {
     expect(onClear).toHaveBeenCalledOnce()
   })
 
-  it('renders count badges when counts are supplied', () => {
-    render(<CanvasFilterBar counts={{ chat: 3, project: 1 }} />)
-    expect(screen.getByText('(3)')).toBeTruthy()
-    expect(screen.getByText('(1)')).toBeTruthy()
+  it('does not render any count badges on the pills', () => {
+    render(<CanvasFilterBar active={['thread', 'project']} />)
+    expect(screen.queryByText(/\(\d+\)/)).toBeNull()
+  })
+
+  it('marks the active pill (and "All" when nothing is selected) as pressed', () => {
+    const { rerender } = render(<CanvasFilterBar />)
+    expect(screen.getByText('All').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText('Project').getAttribute('aria-pressed')).toBe('false')
+
+    rerender(<CanvasFilterBar active={['project']} />)
+    expect(screen.getByText('All').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByText('Project').getAttribute('aria-pressed')).toBe('true')
   })
 })
 

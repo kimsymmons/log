@@ -55,9 +55,11 @@ export function shapeToNode(shape: TLShape): LogNode | null {
         timestamp: new Date(s.props.createdAt).toISOString(),
         messages: s.props.messages,
       }
-      // Only carry provenance when present, so chats without a source link
-      // round-trip cleanly (no stray undefined key).
+      // Carry optional fields only when present so chats without them
+      // round-trip cleanly (no stray undefined keys).
       if (s.props.linkedShapeId) node.linkedShapeId = s.props.linkedShapeId
+      if (s.props.tags !== undefined) node.tags = s.props.tags
+      if (s.props.cardType !== undefined) node.cardType = s.props.cardType
       return node
     }
     case 'draw': {
@@ -100,6 +102,8 @@ export function nodeToShape(node: LogNode, pageId: TLParentId): TLShapePartial |
         createdAt: new Date(node.timestamp).getTime(),
       }
       if (node.linkedShapeId) props.linkedShapeId = node.linkedShapeId
+      if (node.tags !== undefined) props.tags = node.tags
+      if (node.cardType !== undefined) props.cardType = node.cardType
       return { ...base, type: 'chat-card', props }
     }
     case 'ink-group': {

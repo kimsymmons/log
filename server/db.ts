@@ -79,6 +79,19 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     db.exec(`ALTER TABLE artifact_links ADD COLUMN rationale TEXT`)
   }
 
+  // Additive migration: sourceUrl on artifacts — link back to the source chat.
+  const artifactCols = db.pragma('table_info(artifacts)') as Array<{ name: string }>
+  if (!artifactCols.map(c => c.name).includes('sourceUrl')) {
+    db.exec(`ALTER TABLE artifacts ADD COLUMN sourceUrl TEXT`)
+  }
+
+  // Additive migration: tags on artifacts — semantic tags from the haiku
+  // extractor (JSON string array). When present, loaders prefer these over the
+  // deterministic auto-tagger.
+  if (!artifactCols.map(c => c.name).includes('tags')) {
+    db.exec(`ALTER TABLE artifacts ADD COLUMN tags TEXT`)
+  }
+
   // Schema migrations table — tracks which migrations have run (idempotent)
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
