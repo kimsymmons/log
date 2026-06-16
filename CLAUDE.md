@@ -2,6 +2,10 @@
 
 tldraw v3 canvas + Express/SQLite backend. Tests: `npm test` (Vitest; jsdom for src/, node for server/). Perf gate: `npm run bench` (P90 ≥ 55fps, also enforced in CI).
 
+## Session hygiene
+
+At the **start of every task**, before creating a new worktree or doing any other work, run `git worktree prune` to clear stale worktree entries.
+
 ## Current data model
 
 **Canonical ChatCard shape props** (`src/shapes/ChatCard.tsx`, validated by tldraw at runtime):
