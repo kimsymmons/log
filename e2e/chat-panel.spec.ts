@@ -13,9 +13,12 @@ test.beforeEach(async ({ page }) => {
   )
   await page.route('**/links**', (route) => route.fulfill({ json: [] }))
   await page.route('**/ink/strokes', (route) => route.fulfill({ json: [] }))
+  // main's canvas loaders (threads/ideas/projects) fetch /artifacts; mock to []
+  // so the spec never needs a live backend.
+  await page.route('**/artifacts**', (route) => route.fulfill({ json: [] }))
 
   await page.goto('/')
-  await page.waitForSelector('.tlui-menu-zone', { timeout: 15_000 })
+  await page.waitForSelector('.tl-canvas', { timeout: 15_000 })
   await page.keyboard.press('Escape')
 })
 
@@ -41,6 +44,11 @@ test('right-clicking a node shows "Chat about this", which opens the panel; Esca
   await menuItem.click()
   await expect(panel).toHaveAttribute('data-open', 'true')
   await expect(page.getByTestId('chat-messages').getByText(/Tell me about this idea/)).toBeVisible()
+
+  // The first AI response spawns a linked chat-card and draws the provenance
+  // line from the source musing back to it (PEO-155).
+  await expect(page.locator('.tl-html-container[data-shape-type="chat-card"]')).toHaveCount(1)
+  await expect(page.getByTestId('provenance-overlay')).toBeVisible()
 
   // Escape closes it.
   await page.keyboard.press('Escape')
