@@ -38,6 +38,7 @@ import { TagFocusProvider } from './canvas/TagFocusContext'
 import { FocusProvider, useFocus } from './canvas/FocusContext'
 import { TagConnectionOverlay } from './canvas/TagConnectionOverlay'
 import { PropertiesPanel } from './canvas/PropertiesPanel'
+import { gridSpacing } from './canvas/gridSpacing'
 import { useThreadLoader } from './hooks/useThreadLoader'
 import { useIdeaLoader } from './hooks/useIdeaLoader'
 import { useProjectLoader } from './hooks/useProjectLoader'
@@ -654,16 +655,15 @@ function GlobalKeyboardShortcuts() {
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
-// Base dot spacing in page units (mirrors --canvas-dot-gap).
-const BASE_DOT_GAP = 24
-
-// Dot-grid canvas background (P2). Tied to tldraw's camera: the gap scales with
-// zoom and the pattern offsets with pan, so the grid tracks the content. The dot
-// size itself stays fixed at --canvas-dot-size.
+// Dot-grid canvas background (P2). Tied to tldraw's camera: the pattern offsets
+// with pan so the grid tracks content, but the gap cycles through discrete
+// spacing levels (Figma/FigJam style) rather than scaling linearly with zoom —
+// so dots never crowd into a smear or drift impossibly far apart. The dot size
+// itself stays fixed at --canvas-dot-size. See ./canvas/gridSpacing.
 function CanvasBackground() {
   const editor = useEditor()
   const camera = useValue('camera', () => editor.getCamera(), [editor])
-  const gap = BASE_DOT_GAP * camera.z
+  const gap = gridSpacing(camera.z) * camera.z
   return (
     <div
       style={{
