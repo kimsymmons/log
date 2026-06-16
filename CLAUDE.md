@@ -93,8 +93,9 @@ Before every merge:
 4. No raw hex values in changed files — CSS variables only (tokens.css is the one
    place hex is defined; everything else uses `var(--token)`)
 5. tldraw default chrome must be hidden; custom chrome must match design spec positions
+6. **If visual or token changes: Figma file updated (component or variable, same PR)** — not optional; see "Figma sync" below.
 
-Visual audit checklist covers: nav/shell, canvas inset, dot grid, tldraw UI hidden, filter bar pills, toolbar, zoom pill font (--font-mono), card typography, surface colours.
+Visual audit checklist covers: nav/shell, canvas inset, dot grid, tldraw UI hidden, filter bar pills, toolbar, zoom pill font (--font-mono), card typography, surface colours, **and the Figma sync (item #6): if the PR touches ANY visual component or design token, the "Log — Design System" Figma file MUST be updated in the same PR.** Do not sign off the visual audit without it.
 
 **What "passing" means — the hard gate is `npm test` + `tsc`.**
 - `tsc` means BOTH configs: `npx tsc --noEmit` (front-end, `tsconfig.json`) AND
@@ -126,3 +127,29 @@ commands and paste the real counts:
 
 A report missing any of these three is incomplete — the reviewer cannot sign off
 without them.
+
+## Figma sync
+
+Code and the design source of truth must not drift. **Any PR that changes a
+visual component** (card, chrome, filter bar, toolbar, status pill, type glyph,
+connection line, …) **or a design token MUST update Figma in the same PR**
+(PR checklist item #6 — not a follow-up).
+
+**File:** "Log — Design System" — Figma file ID `JLsEzp7FNlPeSza94YJQYm`.
+
+- **Component change** → update the matching component in that file via the Figma
+  MCP `use_figma` tool (load the figma-use guidance first, as the tool instructs).
+  E.g. a ChatCard tweak updates the card component; a toolbar change updates the
+  toolbar frame; a new node type adds its component.
+- **Token change** → update the Figma **Variables** in the same file so they match
+  the new `tokens.css` value (colour, radius, spacing, type-scale, shadow, …).
+
+### Direction of sync
+
+- **code → Figma** (this rule, mandatory every PR): push code/token changes INTO
+  Figma via the Figma MCP, which is **already connected**. This is the only
+  direction enforced today.
+- **Figma → code** (token pipeline): pulling token edits made in Figma back into
+  `tokens.css` requires the **Figma Console MCP**, which is **not yet installed** —
+  set it up separately before relying on that direction. Until then, tokens are
+  authored in `tokens.css` and pushed to Figma, never the reverse.
