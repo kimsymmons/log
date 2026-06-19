@@ -42,6 +42,10 @@ import { gridSpacing } from './canvas/gridSpacing'
 import { useThreadLoader } from './hooks/useThreadLoader'
 import { useIdeaLoader } from './hooks/useIdeaLoader'
 import { useProjectLoader } from './hooks/useProjectLoader'
+import { provenancePairs } from './canvas/provenance'
+import { ChatPanelProvider } from './canvas/ChatPanelContext'
+import { ChatContextMenu } from './canvas/ChatContextMenu'
+import { ChatPanel } from './components/ChatPanel'
 
 const shapeUtils = [
   ChatCardShapeUtil,
@@ -146,6 +150,62 @@ function TetherOverlay() {
           style={{ stroke: 'var(--border-3)' }}
           strokeWidth={1.5}
           strokeDasharray="5 4"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  )
+}
+
+// ── ProvenanceOverlay (PEO-155) ──────────────────────────────────────────────
+// Draws the structural link from a source node to the chat-card spawned off it
+// via "Chat about this →" (chat.props.linkedShapeId). Accent styling separates
+// it from the muted artifact tethers and the tag-connection lines.
+
+function ProvenanceOverlay() {
+  const editor = useEditor()
+  const [lines, setLines] = useState<Array<{ key: string; x1: number; y1: number; x2: number; y2: number }>>([])
+
+  useEffect(() => {
+    const compute = () => {
+      const shapes = editor.getCurrentPageShapes()
+      const shapeMap = new Map(shapes.map(s => [s.id, s]))
+
+      const newLines: typeof lines = []
+      for (const { chatId, sourceId } of provenancePairs(shapes)) {
+        const chat = shapeMap.get(chatId as ChatCardShape['id'])
+        const source = shapeMap.get(sourceId as ChatCardShape['id'])
+        if (!chat || !source) continue
+
+        const chatBounds = editor.getShapePageBounds(chat)
+        const srcBounds = editor.getShapePageBounds(source)
+        if (!chatBounds || !srcBounds) continue
+
+        const p1 = editor.pageToScreen({ x: srcBounds.midX, y: srcBounds.midY })
+        const p2 = editor.pageToScreen({ x: chatBounds.midX, y: chatBounds.midY })
+        newLines.push({ key: chatId, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y })
+      }
+      setLines(newLines)
+    }
+
+    compute()
+    return editor.store.listen(compute)
+  }, [editor])
+
+  if (lines.length === 0) return null
+
+  return (
+    <svg
+      data-testid="provenance-overlay"
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', overflow: 'visible' }}
+    >
+      {lines.map(({ key, x1, y1, x2, y2 }) => (
+        <line
+          key={key}
+          x1={x1} y1={y1} x2={x2} y2={y2}
+          style={{ stroke: 'var(--accent)' }}
+          strokeWidth={1.5}
+          strokeDasharray="2 4"
           strokeLinecap="round"
         />
       ))}
@@ -788,6 +848,7 @@ function CanvasOverlays() {
       <FocusController />
       <TagConnectionOverlay />
       <TetherOverlay />
+      <ProvenanceOverlay />
       {/* Legacy ink strokes render read-only; new ink uses tldraw's draw tool. */}
       <InkLayer
         active={false}
@@ -894,6 +955,7 @@ export default function App() {
   const components = React.useMemo(() => ({
     InFrontOfTheCanvas: CanvasOverlays,
     Background: CanvasBackground,
+    ContextMenu: ChatContextMenu,
     Toolbar: null,
     StylePanel: null,
     PageMenu: null,
@@ -916,6 +978,7 @@ export default function App() {
   if (!authReady) return <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-app)' }} />
 
   return (
+    <ChatPanelProvider>
     <FilterProvider>
       <TagFocusProvider>
         <FocusProvider>
@@ -953,5 +1016,7 @@ export default function App() {
         </FocusProvider>
       </TagFocusProvider>
     </FilterProvider>
+    <ChatPanel />
+    </ChatPanelProvider>
   )
 }

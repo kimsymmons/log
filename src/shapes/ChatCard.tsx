@@ -41,6 +41,8 @@ export type ChatCardShape = TLBaseShape<'chat-card', {
   summary: string
   createdAt: number
   tags?: string[]
+  /** Canvas shape this chat was spawned from via "Chat about this" (PEO-155). */
+  linkedShapeId?: string
   cardType?: string
   sourceUrl?: string
   /** For Idea cards: the artifact id of the Thread this was extracted from. */
@@ -133,7 +135,7 @@ export function parseSseData(data: string): SseEvent | null {
   return null
 }
 
-async function* readSseLines(response: Response): AsyncGenerator<SseEvent> {
+export async function* readSseLines(response: Response): AsyncGenerator<SseEvent> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -595,6 +597,7 @@ export class ChatCardShapeUtil extends BaseBoxShapeUtil<ChatCardShape> {
     summary: T.string,
     createdAt: T.number,
     tags: T.optional(T.arrayOf(T.string)),
+    linkedShapeId: T.optional(T.string),
     cardType: T.optional(T.string),
     sourceUrl: T.optional(T.string),
     sourceThreadId: T.optional(T.string),

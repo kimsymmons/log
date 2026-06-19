@@ -14,7 +14,7 @@ import {
   type TLShapePartial,
 } from 'tldraw'
 import type { ChatCardShape } from '../shapes/ChatCard'
-import type { InkGroupNode, InkSegment, LogNode } from './nodes'
+import type { ChatNode, InkGroupNode, InkSegment, LogNode } from './nodes'
 
 function segmentBounds(segments: InkSegment[]): { w: number; h: number } {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -45,7 +45,7 @@ export function shapeToNode(shape: TLShape): LogNode | null {
   switch (shape.type) {
     case 'chat-card': {
       const s = shape as ChatCardShape
-      const node: LogNode = {
+      const node: ChatNode = {
         ...base,
         type: 'chat',
         w: s.props.w,
@@ -53,9 +53,11 @@ export function shapeToNode(shape: TLShape): LogNode | null {
         title: s.props.title,
         body: s.props.summary,
         timestamp: new Date(s.props.createdAt).toISOString(),
+        messages: s.props.messages,
       }
-      // Persist tags/cardType only when present so existing round-trips
-      // (shapes created without them) stay byte-identical.
+      // Carry optional fields only when present so chats without them
+      // round-trip cleanly (no stray undefined keys).
+      if (s.props.linkedShapeId) node.linkedShapeId = s.props.linkedShapeId
       if (s.props.tags !== undefined) node.tags = s.props.tags
       if (s.props.cardType !== undefined) node.cardType = s.props.cardType
       return node
@@ -95,10 +97,11 @@ export function nodeToShape(node: LogNode, pageId: TLParentId): TLShapePartial |
         w: node.w,
         h: node.h,
         title: node.title,
-        messages: [],
+        messages: node.messages ?? [],
         summary: node.body,
         createdAt: new Date(node.timestamp).getTime(),
       }
+      if (node.linkedShapeId) props.linkedShapeId = node.linkedShapeId
       if (node.tags !== undefined) props.tags = node.tags
       if (node.cardType !== undefined) props.cardType = node.cardType
       return { ...base, type: 'chat-card', props }

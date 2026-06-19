@@ -126,6 +126,45 @@ describe('chat-card mapping', () => {
     const partial = nodeToShape(node, PAGE_ID)!
     expect(partial.parentId).toBe('shape:region-1')
   })
+
+  it('persists the conversation and provenance link across a round-trip (PEO-155)', () => {
+    const shape = makeChatShape({
+      props: {
+        w: 240, h: 120,
+        title: 'Spawned chat',
+        messages: [
+          { role: 'user', content: 'Tell me about this idea: spatial canvas' },
+          { role: 'assistant', content: 'It is a tldraw workspace.' },
+        ],
+        summary: 'A short summary.',
+        createdAt: new Date('2026-06-16T09:00:00.000Z').getTime(),
+        linkedShapeId: 'shape:musing-7',
+      },
+    })
+
+    const node = shapeToNode(shape) as ChatNode
+    expect(node.messages).toHaveLength(2)
+    expect(node.linkedShapeId).toBe('shape:musing-7')
+
+    // Survives JSON serialisation (the localStorage persistence path) …
+    const back = deserializeNodes(serializeNodes([node]))[0] as ChatNode
+    expect(back.messages).toEqual(node.messages)
+    expect(back.linkedShapeId).toBe('shape:musing-7')
+
+    // … and re-hydrates into a shape with the same props.
+    const partial = nodeToShape(back, PAGE_ID)!
+    const props = partial.props as ChatCardShape['props']
+    expect(props.messages).toEqual(node.messages)
+    expect(props.linkedShapeId).toBe('shape:musing-7')
+  })
+
+  it('omits linkedShapeId for chats with no source (clean round-trip)', () => {
+    const node = shapeToNode(makeChatShape()) as ChatNode
+    expect('linkedShapeId' in node).toBe(false)
+
+    const partial = nodeToShape(node, PAGE_ID)!
+    expect('linkedShapeId' in (partial.props as object)).toBe(false)
+  })
 })
 
 describe('ink mapping', () => {
