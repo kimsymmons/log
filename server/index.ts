@@ -660,6 +660,38 @@ export function createApp(db: Database.Database, anthropicOverride?: AnthropicLi
     res.json({ ok: true })
   })
 
+  // ── Agent session status (PEO-150) ──────────────────────────────────────
+  // Dispatch upserts a session's live state; in-canvas agent cards poll it.
+  const VALID_SESSION_STATUS = new Set(['running', 'idle', 'complete', 'error'])
+
+  // GET /sessions/:id/status — latest status, or 404 if unknown.
+  app.get('/sessions/:id/status', requireAuth, (req: Request, res: Response) => {
+    const { id } = req.params
+    const row = db.prepare('SELECT id, status, updated_at FROM sessions WHERE id = ?').get(id) as
+      | { id: string; status: string; updated_at: number }
+      | undefined
+    if (!row) {
+      res.status(404).json({ error: 'session not found' })
+      return
+    }
+    res.json({ id: row.id, status: row.status, updatedAt: row.updated_at })
+  })
+
+  // POST /sessions/:id/status — upsert a session's status.
+  app.post('/sessions/:id/status', requireAuth, (req: Request, res: Response) => {
+    const { id } = req.params
+    const { status } = req.body as { status?: string }
+    if (!status || !VALID_SESSION_STATUS.has(status)) {
+      res.status(400).json({ error: 'status must be one of: running, idle, complete, error' })
+      return
+    }
+    db.prepare(
+      'INSERT INTO sessions (id, status, updated_at) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at'
+    ).run(id, status, Date.now())
+    res.json({ id, status })
+  })
+
   // GET /cost/summary
   app.get('/cost/summary', requireAuth, (req: Request, res: Response) => {
     const rows = db.prepare(

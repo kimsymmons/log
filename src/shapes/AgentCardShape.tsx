@@ -8,6 +8,7 @@ import { FilterDimContainer } from '../canvas/FilterContext'
 import { AgentNode } from '../design-system/AgentNode'
 import { Tag } from '../design-system/Tag'
 import { useDetailLevel, detailDisplay } from '../hooks/useDetailLevel'
+import { useAgentSessionStatus } from '../hooks/useAgentSessionStatus'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export type AgentCardShape = TLBaseShape<'agent-card', {
   taskDescription: string
   linkedTicket?: string
   linkedChatId?: string
+  /** Dispatch session id this card mirrors; when set, the card polls live status. */
+  sessionId?: string
   tags: string[]
   startedAt: number
 }>
@@ -59,7 +62,7 @@ function formatElapsed(ms: number): string {
 // ── Inner component ────────────────────────────────────────────────────────
 
 export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
-  const { agentName, model, status, taskDescription, linkedTicket, tags, startedAt } = shape.props
+  const { agentName, model, status, taskDescription, linkedTicket, sessionId, tags, startedAt } = shape.props
   const [elapsed, setElapsed] = useState(() => Date.now() - startedAt)
 
   useEffect(() => {
@@ -67,8 +70,11 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
     return () => clearInterval(id)
   }, [startedAt])
 
-  const statusColor = STATUS_COLOR[status]
-  const isRunning = status === 'running'
+  // Live session status (PEO-150): polls the backend when a sessionId is set,
+  // otherwise falls back to the persisted prop status.
+  const liveStatus = useAgentSessionStatus(sessionId, status)
+  const statusColor = STATUS_COLOR[liveStatus]
+  const isRunning = liveStatus === 'running'
   const detail = useDetailLevel()
   const d = detailDisplay(detail)
 
@@ -130,7 +136,7 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
       {/* status row */}
       <div style={{ display: d.secondary ?? 'flex', alignItems: 'center', gap: 6 }}>
         <span
-          data-status={status}
+          data-status={liveStatus}
           style={{
             width: 7,
             height: 7,
@@ -147,7 +153,7 @@ export function AgentCardInner({ shape }: { shape: AgentCardShape }) {
           color: statusColor,
           fontWeight: 'var(--weight-medium)',
         }}>
-          {STATUS_LABEL[status]}
+          {STATUS_LABEL[liveStatus]}
         </span>
         <span style={{
           marginLeft: 'auto',
@@ -220,6 +226,7 @@ export class AgentCardShapeUtil extends BaseBoxShapeUtil<AgentCardShape> {
     taskDescription: T.string,
     linkedTicket: T.optional(T.string),
     linkedChatId: T.optional(T.string),
+    sessionId: T.optional(T.string),
     tags: T.arrayOf(T.string),
     startedAt: T.number,
   }

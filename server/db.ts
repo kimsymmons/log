@@ -163,5 +163,15 @@ export function getServerDb(path: string = process.env.DATABASE_PATH ?? 'log.db'
     )
   `)
 
+  // Agent session status (PEO-150) — Dispatch upserts a session's live state
+  // here; in-canvas agent cards poll it to show running/idle/complete/error.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `)
+
   return db
 }
