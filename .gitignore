@@ -7,3 +7,15 @@ dist/
 e2e/.auth/
 test-results/
 playwright-report/
+
+# Local scratch / generated artifacts (not source)
+log.db*
+eval/
+design-compare-screens/
+.claude/settings.local.json
+.claude/launch.json
+
+# Linking-eval scratch (PEO-121 experiment, not part of the app build)
+scripts/eval-links.js
+server/eval-metrics.ts
+server/__tests__/eval-metrics.test.ts
