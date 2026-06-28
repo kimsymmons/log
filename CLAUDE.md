@@ -49,9 +49,14 @@ Two-layer approach: Vitest for units/integration, Playwright for E2E.
 
 ## Visual regression harness
 
-`e2e/visual-baseline.spec.ts` (full-page chrome) and `e2e/visual/*.spec.ts`
-(component-level: thread card, connection line, filter bar, toolbar, zoom pill)
-capture screenshots against `BASE_URL`.
+`e2e/visual.spec.ts` (PEO-162 — the comprehensive per-surface harness: every
+card type, all chrome, command palette, and both overlays) is the primary
+regression runner referenced in the PR checklist. `e2e/visual-baseline.spec.ts`
+(full-page chrome) and `e2e/visual/*.spec.ts` (component-level: thread card,
+connection line, filter bar, toolbar, zoom pill) are the older chrome-focused
+specs. All capture screenshots against `BASE_URL`. (Playwright needs no separate
+"baseline" vs "runner" file — `toHaveScreenshot()` compares on a normal run and
+rewrites with `--update-snapshots`; the flag is the only difference.)
 - **Where the baselines live:** committed PNGs in a `<spec>.spec.ts-snapshots/`
   dir next to each spec, named `<name>-chromium-darwin.png` (per-platform — a
   Linux CI run produces different files, so regenerate on macOS).
@@ -89,7 +94,10 @@ capture screenshots against `BASE_URL`.
 Before every merge:
 1. Run `npm test` + `tsc` — must be clean
 2. Start the app locally, screenshot it, check the visual audit checklist (see memory)
-3. Run `npm run test:e2e` — includes visual regression tests
+3. Run `npx playwright test e2e/visual.spec.ts` and confirm no diffs. If the
+   change is intentional, run with `--update-snapshots` and commit the new
+   baselines. (`npm run test:e2e` runs the full suite including the older
+   `e2e/visual-baseline.spec.ts` + `e2e/visual/*.spec.ts` chrome subset.)
 4. No raw hex values in changed files — CSS variables only (tokens.css is the one
    place hex is defined; everything else uses `var(--token)`)
 5. tldraw default chrome must be hidden; custom chrome must match design spec positions
